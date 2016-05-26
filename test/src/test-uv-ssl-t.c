@@ -22,13 +22,22 @@ static SSL* ssl_right;
 static uv_thread_t client_thread;
 
 
+static int handshakes_done;
+static int read_cb_called;
+
+
 static void client_thread_body(void* arg) {
   int err;
 
   err = SSL_connect(ssl_left);
-  if (err == 1)
-    return;
+  if (err != 1)
+    goto fail;
 
+  CHECK_EQ(SSL_write(ssl_left, "hello", 5), 5, "SSL_write() == 5");
+
+  return;
+
+fail:
   ERR_print_errors_fp(stderr);
   CHECK(0, "SSL_connect() != 0");
 }
@@ -36,7 +45,22 @@ static void client_thread_body(void* arg) {
 
 static void ssl_right_info_cb(const SSL* ssl, int where, int val) {
   if ((where & SSL_CB_HANDSHAKE_DONE) != 0)
-    CHECK_EQ(uv_link_read_stop(&observer.link), 0, "uv_link_read_stop()");
+    handshakes_done++;
+}
+
+
+static void observer_read_cb(uv_link_observer_t* observer,
+                             ssize_t nread,
+                             const uv_buf_t* buf) {
+  if (nread == 0)
+    return;
+
+  CHECK_EQ(nread, 5, "observer_read_cb data size match");
+  CHECK_EQ(strcmp(buf->base, "hello"), 0, "observer_read_cb data match");
+
+  read_cb_called++;
+
+  CHECK_EQ(uv_link_read_stop(&observer->link), 0, "uv_link_read_stop()");
 }
 
 
@@ -96,15 +120,20 @@ TEST_IMPL(uv_ssl_t) {
            "uv_link_observer_init()");
 
   CHECK_EQ(uv_link_read_start(&observer.link), 0, "uv_link_read_start()");
+  observer.read_cb = observer_read_cb;
+  SSL_set_info_callback(ssl_right, ssl_right_info_cb);
+
+  /* Start client thread */
 
   CHECK_EQ(uv_thread_create(&client_thread, client_thread_body, NULL), 0,
            "uv_thread_create()");
 
-  SSL_set_info_callback(ssl_right, ssl_right_info_cb);
-
   uv_run(loop, UV_RUN_DEFAULT);
 
   uv_thread_join(&client_thread);
+
+  CHECK_EQ(handshakes_done, 1, "number of handshakes");
+  CHECK_EQ(read_cb_called, 1, "number of reads");
 
   /* Free resources */
 

@@ -72,6 +72,7 @@ uv_link_t* uv_ssl_get_link(uv_ssl_t* s) {
 
 
 void uv_ssl_cycle(uv_ssl_t* s) {
+  /* TODO(indutny): prevent recursion */
   /* TODO(indutny): kill connection on error */
   if (uv_ssl_cycle_input(s) == 0)
     uv_ssl_cycle_output(s);
@@ -82,6 +83,7 @@ int uv_ssl_cycle_input(uv_ssl_t* s) {
   static const size_t kSuggestedSize = 16 * 1024;
   uv_buf_t buf;
   int bytes;
+  int err;
 
   do {
     uv_link_propagate_alloc_cb(&s->link, kSuggestedSize, &buf);
@@ -91,9 +93,24 @@ int uv_ssl_cycle_input(uv_ssl_t* s) {
     }
 
     bytes = SSL_read(s->ssl, buf.base, buf.len);
+    if (bytes <= 0)
+      break;
+
+    uv_link_propagate_read_cb(&s->link, bytes, &buf);
   } while (bytes > 0);
 
-  return 0;
+  err = SSL_get_error(s->ssl, bytes);
+  if (err == SSL_ERROR_WANT_READ ||
+      err == SSL_ERROR_WANT_WRITE ||
+      err == SSL_ERROR_WANT_X509_LOOKUP) {
+    err = 0;
+  } else {
+    /* TODO(indutny): meaningful errors */
+    err = UV_EPROTO;
+  }
+
+  uv_link_propagate_read_cb(&s->link, err, &buf);
+  return err;
 }
 
 
