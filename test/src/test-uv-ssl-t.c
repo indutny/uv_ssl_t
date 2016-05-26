@@ -68,9 +68,7 @@ static void observer_read_cb(uv_link_observer_t* observer,
 TEST_IMPL(uv_ssl_t) {
   int err;
 
-  loop = uv_default_loop();
-  CHECK_NE(loop, NULL, "uv_default_loop()");
-
+  CHECK_NE(loop = uv_default_loop(), NULL, "uv_default_loop()");
   CHECK_EQ(socketpair(AF_UNIX, SOCK_STREAM, 0, fds), 0, "socketpair()");
 
   /* Initialize source */
@@ -83,10 +81,8 @@ TEST_IMPL(uv_ssl_t) {
 
   /* Initialize SSL_CTX */
 
-  ssl_ctx_left = SSL_CTX_new(TLSv1_2_method());
-  CHECK_NE(ssl_ctx_left, NULL, "SSL_CTX_new");
-  ssl_ctx_right = SSL_CTX_new(TLSv1_2_method());
-  CHECK_NE(ssl_ctx_right, NULL, "SSL_CTX_new");
+  CHECK_NE(ssl_ctx_left = SSL_CTX_new(TLSv1_2_method()), NULL, "SSL_CTX_new");
+  CHECK_NE(ssl_ctx_right = SSL_CTX_new(TLSv1_2_method()), NULL, "SSL_CTX_new");
 
   CHECK_EQ(SSL_CTX_use_certificate_file(
                ssl_ctx_right, "test/keys/cert.pem", SSL_FILETYPE_PEM),
@@ -103,13 +99,11 @@ TEST_IMPL(uv_ssl_t) {
   CHECK_NE(ssl_right, NULL, "SSL_new(left)");
   SSL_set_accept_state(ssl_right);
 
-  ssl_link = uv_ssl_create(ssl_right, &err);
-  CHECK_NE(ssl_link, NULL, "uv_ssl_create");
+  CHECK_NE(ssl_link = uv_ssl_create(ssl_right, &err), NULL, "uv_ssl_create");
 
   /* Left part of the pair is using `SSL_set_fd()` */
 
-  ssl_left = SSL_new(ssl_ctx_left);
-  CHECK_NE(ssl_left, NULL, "SSL_new(left)");
+  CHECK_NE(ssl_left = SSL_new(ssl_ctx_left), NULL, "SSL_new(left)");
   SSL_set_connect_state(ssl_left);
   SSL_set_fd(ssl_left, fds[0]);
 
