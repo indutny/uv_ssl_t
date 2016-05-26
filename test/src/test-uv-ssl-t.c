@@ -56,7 +56,8 @@ static void observer_read_cb(uv_link_observer_t* observer,
     return;
 
   CHECK_EQ(nread, 5, "observer_read_cb data size match");
-  CHECK_EQ(strcmp(buf->base, "hello"), 0, "observer_read_cb data match");
+  CHECK_EQ(strncmp(buf->base, "hello", nread), 0,
+           "observer_read_cb data match");
 
   read_cb_called++;
 
