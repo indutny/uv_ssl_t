@@ -20,7 +20,6 @@
       "src/main.c",
       "src/test-handshake.c",
       "src/test-read-incoming.c",
-      "src/test-try-write.c",
       "src/test-write.c",
     ],
   }],
