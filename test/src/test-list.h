@@ -4,6 +4,7 @@
 #define TEST_ENUM(V)                                                          \
     V(handshake)                                                              \
     V(read_incoming)                                                          \
+    V(write)                                                                  \
 
 #define TEST_DECL(N) void test__##N();
 

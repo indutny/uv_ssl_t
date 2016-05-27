@@ -7,6 +7,9 @@
 
 static int uv_ssl_cycle_input(uv_ssl_t* s);
 static int uv_ssl_cycle_output(uv_ssl_t* s);
+static int uv_ssl_cycle_pending(uv_ssl_t* s);
+static int uv_ssl_handshake_read_start(uv_ssl_t* s);
+static int uv_ssl_handshake_read_stop(uv_ssl_t* s);
 static void uv_ssl_write_cb(uv_link_t* link, int status);
 
 uv_ssl_t* uv_ssl_create(SSL* ssl, int* err) {
@@ -19,6 +22,8 @@ uv_ssl_t* uv_ssl_create(SSL* ssl, int* err) {
     *err = UV_ENOMEM;
     return res;
   }
+
+  QUEUE_INIT(&res->write_queue);
 
   ringbuffer_init(&res->encrypted.input);
   ringbuffer_init(&res->encrypted.output);
@@ -71,11 +76,36 @@ uv_link_t* uv_ssl_get_link(uv_ssl_t* s) {
 }
 
 
-void uv_ssl_cycle(uv_ssl_t* s) {
-  /* TODO(indutny): prevent recursion */
+int uv_ssl_cycle(uv_ssl_t* s) {
+  int err;
+
+  if (s->cycle != 0)
+    return 0;
+
+  s->cycle = 1;
+
   /* TODO(indutny): kill connection on error */
-  if (uv_ssl_cycle_input(s) == 0)
-    uv_ssl_cycle_output(s);
+  err = uv_ssl_cycle_input(s);
+  if (err == 0)
+    err = uv_ssl_cycle_pending(s);
+  if (err == 0)
+    err = uv_ssl_cycle_output(s);
+
+  s->cycle = 0;
+
+  return err;
+}
+
+
+int uv_ssl_handshake_read_start(uv_ssl_t* s) {
+  s->reading = kSSLReadingHandshake;
+  return uv_link_read_start(s->link.parent);
+}
+
+
+int uv_ssl_handshake_read_stop(uv_ssl_t* s) {
+  s->reading = kSSLReadingNone;
+  return uv_link_read_stop(s->link.parent);
 }
 
 
@@ -85,32 +115,96 @@ int uv_ssl_cycle_input(uv_ssl_t* s) {
   int bytes;
   int err;
 
-  do {
-    uv_link_propagate_alloc_cb(&s->link, kSuggestedSize, &buf);
-    if (buf.len == 0) {
-      uv_link_propagate_read_cb(&s->link, UV_ENOBUFS, &buf);
-      return -1;
-    }
+  err = 0;
 
-    bytes = SSL_read(s->ssl, buf.base, buf.len);
-    if (bytes <= 0)
-      break;
+  if (s->reading == kSSLReadingData) {
+    /* Reads were requested */
+    do {
+      uv_link_propagate_alloc_cb(&s->link, kSuggestedSize, &buf);
+      if (buf.len == 0) {
+        uv_link_propagate_read_cb(&s->link, UV_ENOBUFS, &buf);
+        return -1;
+      }
 
-    uv_link_propagate_read_cb(&s->link, bytes, &buf);
-  } while (bytes > 0);
+      bytes = SSL_read(s->ssl, buf.base, buf.len);
+      if (bytes <= 0)
+        break;
 
-  err = SSL_get_error(s->ssl, bytes);
-  if (err == SSL_ERROR_WANT_READ ||
-      err == SSL_ERROR_WANT_WRITE ||
-      err == SSL_ERROR_WANT_X509_LOOKUP) {
+      uv_link_propagate_read_cb(&s->link, bytes, &buf);
+    } while (bytes > 0);
+
+    err = SSL_get_error(s->ssl, bytes);
+  } else if (!SSL_is_init_finished(s->ssl)) {
+    /* No reads were requested, just perform handshake */
+    if (SSL_is_server(s->ssl))
+      err = SSL_accept(s->ssl);
+    else
+      err = SSL_connect(s->ssl);
+
+    if (err <= 0)
+      err = SSL_get_error(s->ssl, err);
+    else
+      err = 0;
+  }
+
+  /* Start reading if asked during handshake */
+  if (err == SSL_ERROR_WANT_READ &&
+      s->reading == kSSLReadingNone &&
+      !SSL_is_init_finished(s->ssl)) {
+    err = uv_ssl_handshake_read_start(s);
+  } else if (err == SSL_ERROR_WANT_READ ||
+             err == SSL_ERROR_WANT_WRITE ||
+             err == SSL_ERROR_WANT_X509_LOOKUP) {
     err = 0;
-  } else {
+  } else if (err != 0) {
     /* TODO(indutny): meaningful errors */
     err = UV_EPROTO;
   }
 
-  uv_link_propagate_read_cb(&s->link, err, &buf);
+  /* Stop reading after handshake */
+  if (err == 0 &&
+      s->reading == kSSLReadingHandshake &&
+      SSL_is_init_finished(s->ssl)) {
+    err = uv_ssl_handshake_read_stop(s);
+  }
+
+  if (s->reading == kSSLReadingData)
+    uv_link_propagate_read_cb(&s->link, err, &buf);
+
   return err;
+}
+
+
+int uv_ssl_cycle_pending(uv_ssl_t* s) {
+  QUEUE write_queue;
+  QUEUE* q;
+  QUEUE* next;
+  int err;
+
+  /* Writes won't succeed until handshake end */
+  if (!SSL_is_init_finished(s->ssl))
+    return 0;
+
+  QUEUE_MOVE(&s->write_queue, &write_queue);
+  QUEUE_INIT(&s->write_queue);
+
+  for (q = QUEUE_HEAD(&write_queue); q != &write_queue; q = next) {
+    uv_ssl_write_t* req;
+    uv_buf_t buf;
+
+    next = QUEUE_NEXT(q);
+    req = QUEUE_DATA(q, uv_ssl_write_t, member);
+
+    buf = uv_buf_init(uv_ssl_write_data(req), req->size);
+    err = uv_link_write(req->link, req->source, &buf, 1, req->send_handle,
+                        req->cb);
+    free(req);
+
+    if (err != 0)
+      return err;
+  }
+
+  return 0;
 }
 
 
@@ -121,9 +215,7 @@ int uv_ssl_cycle_output(uv_ssl_t* s) {
   size_t size[ARRAY_SIZE(out)];
   size_t count;
   size_t i;
-
-  if (s->writing)
-    return 0;
+  int err;
 
   count = ARRAY_SIZE(out);
   avail = ringbuffer_read_nextv(&s->encrypted.output, out, size, &count);
@@ -135,9 +227,15 @@ int uv_ssl_cycle_output(uv_ssl_t* s) {
 
   /* TODO(indutny): try_write first */
 
-  s->writing = avail;
-  return uv_link_write(s->link.parent, &s->link, buf, count, NULL,
-                       uv_ssl_write_cb);
+  err = uv_link_write(s->link.parent, &s->link, buf, count, NULL,
+                      uv_ssl_write_cb);
+  if (err != 0)
+    return err;
+
+  /* Consume data that was sent */
+  ringbuffer_read_skip(&s->encrypted.output, avail);
+
+  return 0;
 }
 
 
@@ -147,9 +245,6 @@ void uv_ssl_write_cb(uv_link_t* link, int status) {
   s = container_of(link, uv_ssl_t, link);
 
   /* TODO(indutny): kill connection on error */
-  if (status == 0)
-    ringbuffer_read_skip(&s->encrypted.output, s->writing);
-  s->writing = 0;
 
   uv_ssl_cycle(s);
 }

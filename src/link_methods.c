@@ -1,6 +1,7 @@
 #include "src/link_methods.h"
 #include "src/common.h"
 #include "src/private.h"
+#include "src/queue.h"
 
 static int uv_ssl_read_start(uv_link_t* link);
 static int uv_ssl_read_stop(uv_link_t* link);
@@ -38,28 +39,83 @@ uv_link_methods_t uv_ssl_methods = {
 
 int uv_ssl_read_start(uv_link_t* link) {
   uv_ssl_t* ssl;
+  int internal;
 
   ssl = container_of(link, uv_ssl_t, link);
 
   uv_ssl_cycle(ssl);
+  internal = ssl->reading == kSSLReadingHandshake;
+  ssl->reading = kSSLReadingData;
+
+  /* Already reading, skip calling parent */
+  if (internal)
+    return 0;
 
   return uv_link_read_start(link->parent);
 }
 
 
 int uv_ssl_read_stop(uv_link_t* link) {
+  uv_ssl_t* ssl;
+
+  ssl = container_of(link, uv_ssl_t, link);
+  ssl->reading = kSSLReadingNone;
+
   return uv_link_read_stop(link->parent);
 }
 
 
+/* TODO(indutny): invoke `cb` after all! */
 int uv_ssl_write(uv_link_t* link,
                  uv_link_t* source,
                  const uv_buf_t bufs[],
                  unsigned int nbufs,
                  uv_stream_t* send_handle,
                  uv_link_write_cb cb) {
-  /* TODO(indutny): implement me */
-  return -1;
+  uv_ssl_t* ssl;
+  unsigned int i;
+  unsigned int j;
+  char* p;
+  size_t extra_size;
+  uv_ssl_write_t* req;
+
+  ssl = container_of(link, uv_ssl_t, link);
+
+  for (i = 0; i < nbufs; i++) {
+    int bytes;
+
+    bytes = SSL_write(ssl->ssl, bufs[i].base, bufs[i].len);
+    if (bytes == -1)
+      break;
+
+    CHECK_EQ(bytes, bufs[i].len, "SSL_write() does not do partial writes");
+  }
+
+  /* All written immediately */
+  if (i == nbufs)
+    return uv_ssl_cycle(ssl);
+
+  /* Only buffers before `i` were written, queue rest */
+  extra_size = 0;
+  for (j = 0; j <= i; j++)
+    extra_size += bufs[i].len;
+
+  req = malloc(sizeof(*req) + extra_size);
+  if (req == NULL)
+    return UV_ENOMEM;
+
+  for (j = 0, p = uv_ssl_write_data(req); j <= i; j++, p += bufs[i].len)
+    memcpy(p, bufs[i].base, bufs[i].len);
+
+  req->link = link;
+  req->source = source;
+  req->size = extra_size;
+  req->send_handle = send_handle;
+  req->cb = cb;
+
+  QUEUE_INSERT_TAIL(&ssl->write_queue, &req->member);
+
+  return uv_ssl_cycle(ssl);
 }
 
 
@@ -101,6 +157,10 @@ void uv_ssl_read_cb_override(uv_link_t* link,
 
   ssl = container_of(link, uv_ssl_t, link);
 
+  /* TODO(indutny): handle error */
+  if (ssl->reading == kSSLReadingNone)
+    uv_link_read_stop(link->parent);
+
   /* Commit data if there was no error */
   r = 0;
   if (nread >= 0)
@@ -108,9 +168,11 @@ void uv_ssl_read_cb_override(uv_link_t* link,
 
   /* Handle EOF */
   if (nread == UV_EOF) {
+    /* TODO(indutny): handle error */
     uv_link_read_stop(link);
     return;
   }
 
+  /* TODO(indutny): handle error */
   uv_ssl_cycle(ssl);
 }
