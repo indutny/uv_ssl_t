@@ -75,7 +75,7 @@ int uv_ssl_write(uv_link_t* link,
   unsigned int j;
   char* p;
   size_t extra_size;
-  uv_ssl_write_t* req;
+  uv_ssl_write_req_t* req;
   int err;
   int bytes;
 

@@ -7,8 +7,8 @@
 
 #include "src/queue.h"
 
-typedef struct uv_ssl_write_s uv_ssl_write_t;
-typedef struct uv_ssl_write_cb_s uv_ssl_write_cb_t;
+typedef struct uv_ssl_write_req_s uv_ssl_write_req_t;
+typedef struct uv_ssl_write_cb_wrap_s uv_ssl_write_cb_wrap_t;
 
 enum uv_ssl_reading_e {
   /* Initial state, or reads are stopped after handshake */
@@ -39,7 +39,7 @@ struct uv_ssl_s {
   } encrypted;
 };
 
-struct uv_ssl_write_s {
+struct uv_ssl_write_req_s {
   QUEUE member;
 
   uv_link_t* link;
@@ -50,7 +50,7 @@ struct uv_ssl_write_s {
   void* arg;
 };
 
-struct uv_ssl_write_cb_s {
+struct uv_ssl_write_cb_wrap_s {
   QUEUE member;
 
   uv_link_t* source;
@@ -62,7 +62,7 @@ int uv_ssl_cycle(uv_ssl_t* ssl);
 int uv_ssl_queue_write_cb(uv_ssl_t* ssl, uv_link_t* source,
                           uv_link_write_cb cb, void* arg);
 
-static char* uv_ssl_write_data(uv_ssl_write_t* req) {
+static char* uv_ssl_write_data(uv_ssl_write_req_t* req) {
   return (char*) req + sizeof(*req);
 }
 

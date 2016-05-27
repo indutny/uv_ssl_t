@@ -204,11 +204,11 @@ int uv_ssl_cycle_pending(uv_ssl_t* s) {
   QUEUE_INIT(&s->write_queue);
 
   for (q = QUEUE_HEAD(&write_queue); q != &write_queue; q = next) {
-    uv_ssl_write_t* req;
+    uv_ssl_write_req_t* req;
     uv_buf_t buf;
 
     next = QUEUE_NEXT(q);
-    req = QUEUE_DATA(q, uv_ssl_write_t, member);
+    req = QUEUE_DATA(q, uv_ssl_write_req_t, member);
 
     buf = uv_buf_init(uv_ssl_write_data(req), req->size);
     err = uv_link_write(req->link, req->source, &buf, 1, req->send_handle,
@@ -279,30 +279,30 @@ void uv_ssl_flush_write_cb(uv_check_t* handle) {
   QUEUE_INIT(&ssl->write_cb_queue);
 
   for (q = QUEUE_HEAD(&write_cb_queue); q != &write_cb_queue; q = next) {
-    uv_ssl_write_cb_t* req;
+    uv_ssl_write_cb_wrap_t* wrap;
 
     next = QUEUE_NEXT(q);
-    req = QUEUE_DATA(q, uv_ssl_write_cb_t, member);
+    wrap = QUEUE_DATA(q, uv_ssl_write_cb_wrap_t, member);
 
-    req->cb(req->source, 0, req->arg);
-    free(req);
+    wrap->cb(wrap->source, 0, wrap->arg);
+    free(wrap);
   }
 }
 
 
 int uv_ssl_queue_write_cb(uv_ssl_t* ssl, uv_link_t* source,
                           uv_link_write_cb cb, void* arg) {
-  uv_ssl_write_cb_t* req;
+  uv_ssl_write_cb_wrap_t* wrap;
 
-  req = malloc(sizeof(*req));
-  if (req == NULL)
+  wrap = malloc(sizeof(*wrap));
+  if (wrap == NULL)
     return UV_ENOMEM;
 
-  req->source = source;
-  req->cb = cb;
-  req->arg = arg;
+  wrap->source = source;
+  wrap->cb = cb;
+  wrap->arg = arg;
 
-  QUEUE_INSERT_TAIL(&ssl->write_cb_queue, &req->member);
+  QUEUE_INSERT_TAIL(&ssl->write_cb_queue, &wrap->member);
 
   if (!uv_is_active((uv_handle_t*) &ssl->write_cb_check))
     return uv_check_start(&ssl->write_cb_check, uv_ssl_flush_write_cb);
