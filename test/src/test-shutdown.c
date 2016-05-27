@@ -42,7 +42,7 @@ static void shutdown_server() {
   /* NOTE: uv_run() will exit after handshake */
   CHECK_EQ(uv_run(loop, UV_RUN_DEFAULT), 0, "uv_run()");
 
-  uv_link_shutdown(serv, serv, shutdown_cb, &test_arg);
+  uv_link_shutdown(serv, shutdown_cb, &test_arg);
 
   CHECK_EQ(uv_run(loop, UV_RUN_DEFAULT), 0, "uv_run()");
 }

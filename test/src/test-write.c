@@ -29,7 +29,7 @@ static void write_server() {
   CHECK_EQ(uv_link_read_stop(serv), 0, "uv_link_read_stop(server)");
 
   buf = uv_buf_init("hello", 5);
-  CHECK_EQ(uv_link_write(serv, serv, &buf, 1, NULL, write_cb, &test_arg), 0,
+  CHECK_EQ(uv_link_write(serv, &buf, 1, NULL, write_cb, &test_arg), 0,
            "uv_link_write(server)");
 
   CHECK_EQ(uv_run(loop, UV_RUN_DEFAULT), 0, "uv_run()");

@@ -217,8 +217,8 @@ int uv_ssl_cycle_pending(uv_ssl_t* s) {
     req = QUEUE_DATA(q, uv_ssl_write_req_t, member);
 
     buf = uv_buf_init(uv_ssl_get_write_data(req), req->size);
-    err = uv_link_write(&s->link, req->source, &buf, 1, NULL, req->cb,
-                        req->arg);
+    err = uv_link_propagate_write(&s->link, req->source, &buf, 1, NULL, req->cb,
+                                  req->arg);
     free(req);
 
     if (err != 0)
@@ -248,8 +248,8 @@ int uv_ssl_cycle_output(uv_ssl_t* s) {
 
   /* TODO(indutny): try_write first */
 
-  err = uv_link_write(s->link.parent, &s->link, buf, count, NULL,
-                      uv_ssl_write_cb, NULL);
+  err = uv_link_propagate_write(s->link.parent, &s->link, buf, count, NULL,
+                                uv_ssl_write_cb, NULL);
   if (err != 0)
     return err;
 
@@ -442,7 +442,7 @@ int uv_ssl_shutdown(uv_ssl_t* ssl, uv_link_t* source, uv_link_shutdown_cb cb,
   if (err != 0)
     return err;
 
-  return uv_link_shutdown(ssl->link.parent, source, cb, arg);
+  return uv_link_propagate_shutdown(ssl->link.parent, source, cb, arg);
 }
 
 
