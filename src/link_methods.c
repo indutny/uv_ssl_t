@@ -65,7 +65,6 @@ int uv_ssl_read_stop(uv_link_t* link) {
 }
 
 
-/* TODO(indutny): invoke `cb` after all! */
 int uv_ssl_write(uv_link_t* link,
                  uv_link_t* source,
                  const uv_buf_t bufs[],
@@ -88,12 +87,20 @@ int uv_ssl_write(uv_link_t* link,
     if (bytes == -1)
       break;
 
-    CHECK_EQ(bytes, bufs[i].len, "SSL_write() does not do partial writes");
+    CHECK_EQ(bytes, (int) bufs[i].len,
+             "SSL_write() does not do partial writes");
   }
 
   /* All written immediately */
-  if (i == nbufs)
+  if (i == nbufs) {
+    int err;
+
+    err = uv_ssl_queue_write_cb(ssl, source, cb);
+    if (err != 0)
+      return err;
+
     return uv_ssl_cycle(ssl);
+  }
 
   /* Only buffers before `i` were written, queue rest */
   extra_size = 0;

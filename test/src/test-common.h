@@ -104,7 +104,7 @@ static void ssl_client_server_test(void (*client_fn)(void),
   CHECK_NE(server.ssl = SSL_new(server.ssl_ctx), NULL, "SSL_new(server)");
   SSL_set_accept_state(server.ssl);
 
-  CHECK_NE(server.ssl_link = uv_ssl_create(server.ssl, &err), NULL,
+  CHECK_NE(server.ssl_link = uv_ssl_create(loop, server.ssl, &err), NULL,
            "uv_ssl_create(server.ssl)");
 
   /* Client part of the pair is using `SSL_set_fd()` */

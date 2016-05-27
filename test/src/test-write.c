@@ -31,8 +31,7 @@ static void write_server() {
            "uv_link_write(server)");
 
   CHECK_EQ(uv_run(loop, UV_RUN_DEFAULT), 0, "uv_run()");
-  /* TODO(indutny): check number of write_cb's once they will be called */
-  /* CHECK_EQ(write_cb_called, 1, "number of write_cb's"); */
+  CHECK_EQ(write_cb_called, 1, "number of write_cb's");
 }
 
 

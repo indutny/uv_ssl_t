@@ -5,6 +5,7 @@
 #include "src/bio.h"
 #include "src/link_methods.h"
 
+static void uv_ssl_check_close_cb(uv_handle_t* handle);
 static int uv_ssl_cycle_input(uv_ssl_t* s);
 static int uv_ssl_cycle_output(uv_ssl_t* s);
 static int uv_ssl_cycle_pending(uv_ssl_t* s);
@@ -12,7 +13,7 @@ static int uv_ssl_handshake_read_start(uv_ssl_t* s);
 static int uv_ssl_handshake_read_stop(uv_ssl_t* s);
 static void uv_ssl_write_cb(uv_link_t* link, int status);
 
-uv_ssl_t* uv_ssl_create(SSL* ssl, int* err) {
+uv_ssl_t* uv_ssl_create(uv_loop_t* loop, SSL* ssl, int* err) {
   uv_ssl_t* res;
   BIO* rbio;
   BIO* wbio;
@@ -24,6 +25,7 @@ uv_ssl_t* uv_ssl_create(SSL* ssl, int* err) {
   }
 
   QUEUE_INIT(&res->write_queue);
+  QUEUE_INIT(&res->write_cb_queue);
 
   ringbuffer_init(&res->encrypted.input);
   ringbuffer_init(&res->encrypted.output);
@@ -44,6 +46,10 @@ uv_ssl_t* uv_ssl_create(SSL* ssl, int* err) {
   rbio = NULL;
   wbio = NULL;
 
+  *err = uv_check_init(loop, &res->write_cb_check);
+  if (*err != 0)
+    goto fail_bio;
+
   return res;
 
 fail_bio:
@@ -60,6 +66,15 @@ fail:
 }
 
 
+void uv_ssl_check_close_cb(uv_handle_t* handle) {
+  uv_ssl_t* ssl;
+
+  ssl = container_of(handle, uv_ssl_t, write_cb_check);
+
+  free(ssl);
+}
+
+
 void uv_ssl_destroy(uv_ssl_t* s) {
   ringbuffer_destroy(&s->encrypted.input);
   ringbuffer_destroy(&s->encrypted.output);
@@ -67,7 +82,7 @@ void uv_ssl_destroy(uv_ssl_t* s) {
   /* NOTE: User is resposible for disposing ssl */
   s->ssl = NULL;
   uv_link_close(&s->link);
-  free(s);
+  uv_close((uv_handle_t*) &s->write_cb_check, uv_ssl_check_close_cb);
 }
 
 
@@ -247,4 +262,49 @@ void uv_ssl_write_cb(uv_link_t* link, int status) {
   /* TODO(indutny): kill connection on error */
 
   uv_ssl_cycle(s);
+}
+
+
+void uv_ssl_flush_write_cb(uv_check_t* handle) {
+  uv_ssl_t* ssl;
+  QUEUE write_cb_queue;
+  QUEUE* q;
+  QUEUE* next;
+
+  CHECK_EQ(uv_check_stop(handle), 0, "uv_check_stop() can't fail");
+
+  ssl = container_of(handle, uv_ssl_t, write_cb_check);
+
+  QUEUE_MOVE(&ssl->write_cb_queue, &write_cb_queue);
+  QUEUE_INIT(&ssl->write_cb_queue);
+
+  for (q = QUEUE_HEAD(&write_cb_queue); q != &write_cb_queue; q = next) {
+    uv_ssl_write_cb_t* req;
+
+    next = QUEUE_NEXT(q);
+    req = QUEUE_DATA(q, uv_ssl_write_cb_t, member);
+
+    req->cb(req->source, 0);
+    free(req);
+  }
+}
+
+
+int uv_ssl_queue_write_cb(uv_ssl_t* ssl, uv_link_t* source,
+                          uv_link_write_cb cb) {
+  uv_ssl_write_cb_t* req;
+
+  req = malloc(sizeof(*req));
+  if (req == NULL)
+    return UV_ENOMEM;
+
+  req->source = source;
+  req->cb = cb;
+
+  QUEUE_INSERT_TAIL(&ssl->write_cb_queue, &req->member);
+
+  if (!uv_is_active((uv_handle_t*) &ssl->write_cb_check))
+    return uv_check_start(&ssl->write_cb_check, uv_ssl_flush_write_cb);
+
+  return 0;
 }
