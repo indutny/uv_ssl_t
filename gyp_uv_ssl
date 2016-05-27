@@ -59,7 +59,7 @@ if __name__ == '__main__':
     args.append(os.path.join(os.path.abspath(root), 'example/example.gyp'))
     args = filter(lambda arg: arg != 'example', args)
   else:
-    args.append(os.path.join(os.path.abspath(root), 'uv_link_t.gyp'))
+    args.append(os.path.join(os.path.abspath(root), 'uv_ssl_t.gyp'))
 
   common_fn  = os.path.join(os.path.abspath(root), 'common.gypi')
   options_fn = os.path.join(os.path.abspath(root), 'options.gypi')

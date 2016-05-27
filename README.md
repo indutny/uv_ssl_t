@@ -3,7 +3,19 @@
 
 **HIGHLY UNSTABLE**
 
-Chainable SSL implementation for [libuv][0].
+Chainable SSL implementation for [libuv][0] based on [uv_link_t][1].
+
+## Why?
+
+Doing SSL asynchronously is hard. This project provides abstract interface that
+works well with the event loop model of [libuv][0].
+
+## How?
+
+The decoupled interface backend is provided by [uv_link_t][1], and is used
+extensively in this project.
+
+Example is available [here][2].
 
 ## LICENSE
 
@@ -31,3 +43,5 @@ OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE
 USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 [0]: https://github.com/libuv/libuv
+[1]: https://github.com/indutny/uv_link_t
+[2]: https://github.com/indutny/uv_ssl_t/tree/master/example

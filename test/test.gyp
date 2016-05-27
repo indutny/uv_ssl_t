@@ -1,6 +1,4 @@
 {
-  "variables": {
-  },
   "targets": [{
     "target_name": "uv_ssl_t-test",
     "type": "executable",
