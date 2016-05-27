@@ -37,14 +37,22 @@ uv_link_methods_t uv_ssl_methods = {
 int uv_ssl_link_read_start(uv_link_t* link) {
   uv_ssl_t* ssl;
   int internal;
+  int err;
 
   ssl = container_of(link, uv_ssl_t, link);
 
-  uv_ssl_cycle(ssl);
-  internal = ssl->reading == kSSLReadingHandshake;
-  ssl->reading = kSSLReadingData;
+  err = uv_ssl_pop_error(ssl);
+  if (err != 0)
+    return err;
 
-  /* Already reading, skip calling parent */
+  err = uv_ssl_cycle(ssl);
+  if (err != 0)
+    return err;
+
+  internal = ssl->state == kSSLStateHandshake;
+  ssl->state = kSSLStateData;
+
+  /* Already state, skip calling parent */
   if (internal)
     return 0;
 
@@ -54,9 +62,15 @@ int uv_ssl_link_read_start(uv_link_t* link) {
 
 int uv_ssl_link_read_stop(uv_link_t* link) {
   uv_ssl_t* ssl;
+  int err;
 
   ssl = container_of(link, uv_ssl_t, link);
-  ssl->reading = kSSLReadingNone;
+
+  err = uv_ssl_pop_error(ssl);
+  if (err != 0)
+    return err;
+
+  ssl->state = kSSLStateNone;
 
   return uv_link_read_stop(link->parent);
 }
@@ -89,6 +103,15 @@ int uv_ssl_link_try_write(uv_link_t* link, const uv_buf_t bufs[],
 
 int uv_ssl_link_shutdown(uv_link_t* link, uv_link_t* source,
                          uv_link_shutdown_cb cb, void* arg) {
+  uv_ssl_t* ssl;
+  int err;
+
+  ssl = container_of(link, uv_ssl_t, link);
+
+  err = uv_ssl_pop_error(ssl);
+  if (err != 0)
+    return err;
+
   /* TODO(indutny): SSL_shutdown() */
   return uv_link_shutdown(link->parent, source, cb, arg);
 }
@@ -119,16 +142,20 @@ void uv_ssl_read_cb_override(uv_link_t* link,
 
   /* Commit data if there was no error */
   r = 0;
-  if (nread >= 0)
+  if (nread >= 0) {
     r = ringbuffer_write_append(&ssl->encrypted.input, nread);
+    if (r != 0)
+      return uv_ssl_error(ssl, UV_ENOMEM, "ringbuffer_write_append()");
+  }
 
   /* Handle EOF */
   if (nread == UV_EOF) {
-    /* TODO(indutny): handle error */
     uv_link_read_stop(link);
-    return;
+    return uv_ssl_error(ssl, UV_EPROTO, "unexpected UV_EOF");
   }
 
-  /* TODO(indutny): handle error */
-  uv_ssl_cycle(ssl);
+  r = uv_ssl_cycle(ssl);
+
+  if (r != 0)
+    uv_ssl_error(ssl, r, NULL);
 }

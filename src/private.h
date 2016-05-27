@@ -10,25 +10,29 @@
 typedef struct uv_ssl_write_req_s uv_ssl_write_req_t;
 typedef struct uv_ssl_write_cb_wrap_s uv_ssl_write_cb_wrap_t;
 
-enum uv_ssl_reading_e {
+enum uv_ssl_state_e {
   /* Initial state, or reads are stopped after handshake */
-  kSSLReadingNone,
+  kSSLStateNone,
 
   /* When reading without `uv_link_read_start()` during handshake */
-  kSSLReadingHandshake,
+  kSSLStateHandshake,
 
   /* When reading with `uv_link_read_start()` */
-  kSSLReadingData
+  kSSLStateData,
+
+  /* When error happened */
+  kSSLStateError
 };
-typedef enum uv_ssl_reading_e uv_ssl_reading_t;
+typedef enum uv_ssl_state_e uv_ssl_state_t;
 
 struct uv_ssl_s {
   uv_link_t link;
 
   SSL* ssl;
   uv_check_t write_cb_check;
+  int pending_err;
 
-  uv_ssl_reading_t reading;
+  uv_ssl_state_t state;
   unsigned int cycle:1;
   QUEUE write_queue;
   QUEUE write_cb_queue;
@@ -55,6 +59,9 @@ struct uv_ssl_write_cb_wrap_s {
   uv_link_write_cb cb;
   void* arg;
 };
+
+void uv_ssl_error(uv_ssl_t* ssl, int err, const char* desc);
+int uv_ssl_pop_error(uv_ssl_t* ssl);
 
 int uv_ssl_cycle(uv_ssl_t* ssl);
 int uv_ssl_write(uv_ssl_t* ssl, uv_link_t* source, const uv_buf_t bufs[],

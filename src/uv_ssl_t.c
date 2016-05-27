@@ -97,12 +97,15 @@ uv_link_t* uv_ssl_get_link(uv_ssl_t* s) {
 int uv_ssl_cycle(uv_ssl_t* s) {
   int err;
 
+  err = uv_ssl_pop_error(s);
+  if (err != 0)
+    return err;
+
   if (s->cycle != 0)
     return 0;
 
   s->cycle = 1;
 
-  /* TODO(indutny): kill connection on error */
   err = uv_ssl_cycle_input(s);
   if (err == 0)
     err = uv_ssl_cycle_pending(s);
@@ -116,13 +119,13 @@ int uv_ssl_cycle(uv_ssl_t* s) {
 
 
 int uv_ssl_handshake_read_start(uv_ssl_t* s) {
-  s->reading = kSSLReadingHandshake;
+  s->state = kSSLStateHandshake;
   return uv_link_read_start(s->link.parent);
 }
 
 
 int uv_ssl_handshake_read_stop(uv_ssl_t* s) {
-  s->reading = kSSLReadingNone;
+  s->state = kSSLStateNone;
   return uv_link_read_stop(s->link.parent);
 }
 
@@ -135,7 +138,7 @@ int uv_ssl_cycle_input(uv_ssl_t* s) {
 
   err = 0;
 
-  if (s->reading == kSSLReadingData) {
+  if (s->state == kSSLStateData) {
     /* Reads were requested */
     do {
       uv_link_propagate_alloc_cb(&s->link, kSuggestedSize, &buf);
@@ -165,9 +168,9 @@ int uv_ssl_cycle_input(uv_ssl_t* s) {
       err = 0;
   }
 
-  /* Start reading if asked during handshake */
+  /* Start state if asked during handshake */
   if (err == SSL_ERROR_WANT_READ &&
-      s->reading == kSSLReadingNone &&
+      s->state == kSSLStateNone &&
       !SSL_is_init_finished(s->ssl)) {
     err = uv_ssl_handshake_read_start(s);
   } else if (err == SSL_ERROR_WANT_READ ||
@@ -179,14 +182,14 @@ int uv_ssl_cycle_input(uv_ssl_t* s) {
     err = UV_EPROTO;
   }
 
-  /* Stop reading after handshake */
+  /* Stop state after handshake */
   if (err == 0 &&
-      s->reading == kSSLReadingHandshake &&
+      s->state == kSSLStateHandshake &&
       SSL_is_init_finished(s->ssl)) {
     err = uv_ssl_handshake_read_stop(s);
   }
 
-  if (s->reading == kSSLReadingData)
+  if (s->state == kSSLStateData)
     uv_link_propagate_read_cb(&s->link, err, &buf);
 
   return err;
@@ -259,12 +262,13 @@ int uv_ssl_cycle_output(uv_ssl_t* s) {
 
 void uv_ssl_write_cb(uv_link_t* link, int status, void* arg) {
   uv_ssl_t* s;
+  int err;
 
   s = container_of(link, uv_ssl_t, link);
 
-  /* TODO(indutny): kill connection on error */
-
-  uv_ssl_cycle(s);
+  err = uv_ssl_cycle(s);
+  if (err != 0)
+    uv_ssl_error(s, err, "uv_ssl_write_cb");
 }
 
 
@@ -329,6 +333,10 @@ int uv_ssl_write(uv_ssl_t* ssl, uv_link_t* source, const uv_buf_t bufs[],
   int err;
   int bytes;
 
+  err = uv_ssl_pop_error(ssl);
+  if (err != 0)
+    return err;
+
   bytes = 0;
   for (i = 0; i < nbufs; i++) {
     bytes = SSL_write(ssl->ssl, bufs[i].base, bufs[i].len);
@@ -387,6 +395,10 @@ int uv_ssl_sync_write(uv_ssl_t* ssl, const uv_buf_t bufs[],
   int bytes;
   int err;
 
+  err = uv_ssl_pop_error(ssl);
+  if (err != 0)
+    return err;
+
   total = 0;
   for (i = 0; i < nbufs; i++) {
     bytes = SSL_write(ssl->ssl, bufs[i].base, bufs[i].len);
@@ -412,4 +424,34 @@ int uv_ssl_sync_write(uv_ssl_t* ssl, const uv_buf_t bufs[],
     return err;
 
   return total;
+}
+
+
+void uv_ssl_error(uv_ssl_t* ssl, int err, const char* desc) {
+  /* Lucky case, user is prepared to handle async error */
+  if (ssl->state == kSSLStateData)
+    return uv_link_propagate_read_cb(&ssl->link, err, NULL);
+
+  if (ssl->state == kSSLStateError)
+    return;
+
+  /* Queue error for later */
+  ssl->state = kSSLStateError;
+  ssl->pending_err = err;
+}
+
+
+int uv_ssl_pop_error(uv_ssl_t* ssl) {
+  int res;
+
+  if (ssl->state != kSSLStateError)
+    return 0;
+
+  /* TODO(indutny): Meaningful error? */
+  if (ssl->pending_err == 0)
+    return UV_EPROTO;
+
+  res = ssl->pending_err;
+  ssl->pending_err = 0;
+  return res;
 }
