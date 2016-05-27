@@ -1,6 +1,7 @@
 #include "test-common.h"
 
 static int write_cb_called;
+static int test_arg;
 
 static void write_client() {
   char buf[1024];
@@ -10,9 +11,10 @@ static void write_client() {
 }
 
 
-static void write_cb(uv_link_t* link, int status) {
+static void write_cb(uv_link_t* link, int status, void* arg) {
   CHECK_EQ(status, 0, "write_cb() status");
   CHECK_EQ(link, &server.observer.link, "write_cb() link must be server");
+  CHECK_EQ(arg, &test_arg, "write_cb() link arg be &test_arg");
 
   write_cb_called++;
 }
@@ -27,7 +29,7 @@ static void write_server() {
   CHECK_EQ(uv_link_read_stop(serv), 0, "uv_link_read_stop(server)");
 
   buf = uv_buf_init("hello", 5);
-  CHECK_EQ(uv_link_write(serv, serv, &buf, 1, NULL, write_cb), 0,
+  CHECK_EQ(uv_link_write(serv, serv, &buf, 1, NULL, write_cb, &test_arg), 0,
            "uv_link_write(server)");
 
   CHECK_EQ(uv_run(loop, UV_RUN_DEFAULT), 0, "uv_run()");

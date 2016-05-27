@@ -1,3 +1,5 @@
 test/deps/libuv
+test/deps/bud
+test/deps/uv_link_t
 tools/gyp
 out/

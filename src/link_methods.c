@@ -5,17 +5,15 @@
 
 static int uv_ssl_read_start(uv_link_t* link);
 static int uv_ssl_read_stop(uv_link_t* link);
-static int uv_ssl_write(uv_link_t* link,
-                        uv_link_t* source,
-                        const uv_buf_t bufs[],
-                        unsigned int nbufs,
-                        uv_stream_t* send_handle,
-                        uv_link_write_cb cb);
+static int uv_ssl_write(uv_link_t* link, uv_link_t* source,
+                        const uv_buf_t bufs[], unsigned int nbufs,
+                        uv_stream_t* send_handle, uv_link_write_cb cb,
+                        void* arg);
 static int uv_ssl_try_write(uv_link_t* link,
                             const uv_buf_t bufs[],
                             unsigned int nbufs);
 static int uv_ssl_shutdown(uv_link_t* link, uv_link_t* source,
-                           uv_link_shutdown_cb cb);
+                           uv_link_shutdown_cb cb, void* arg);
 static void uv_ssl_alloc_cb_override(uv_link_t* link,
                                      size_t suggested_size,
                                      uv_buf_t* buf);
@@ -70,7 +68,8 @@ int uv_ssl_write(uv_link_t* link,
                  const uv_buf_t bufs[],
                  unsigned int nbufs,
                  uv_stream_t* send_handle,
-                 uv_link_write_cb cb) {
+                 uv_link_write_cb cb,
+                 void* arg) {
   uv_ssl_t* ssl;
   unsigned int i;
   unsigned int j;
@@ -94,7 +93,7 @@ int uv_ssl_write(uv_link_t* link,
 
   /* All written immediately */
   if (i == nbufs) {
-    err = uv_ssl_queue_write_cb(ssl, source, cb);
+    err = uv_ssl_queue_write_cb(ssl, source, cb, arg);
     if (err != 0)
       return err;
 
@@ -127,6 +126,7 @@ int uv_ssl_write(uv_link_t* link,
   req->size = extra_size;
   req->send_handle = send_handle;
   req->cb = cb;
+  req->arg = arg;
 
   QUEUE_INSERT_TAIL(&ssl->write_queue, &req->member);
 
@@ -174,9 +174,10 @@ int uv_ssl_try_write(uv_link_t* link,
 
 
 int uv_ssl_shutdown(uv_link_t* link, uv_link_t* source,
-                    uv_link_shutdown_cb cb) {
+                    uv_link_shutdown_cb cb,
+                    void* arg) {
   /* TODO(indutny): SSL_shutdown() */
-  return uv_link_shutdown(link->parent, source, cb);
+  return uv_link_shutdown(link->parent, source, cb, arg);
 }
 
 
