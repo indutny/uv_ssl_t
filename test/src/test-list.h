@@ -2,7 +2,8 @@
 #define TEST_SRC_TEST_LIST_H_
 
 #define TEST_ENUM(V)                                                          \
-    V(uv_ssl_t)                                                               \
+    V(handshake)                                                              \
+    V(read_incoming)                                                          \
 
 #define TEST_DECL(N) void test__##N();
 
