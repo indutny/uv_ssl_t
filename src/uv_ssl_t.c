@@ -99,6 +99,7 @@ int uv_ssl_cycle(uv_ssl_t* s) {
 
   s->cycle = 1;
 
+  /* TODO(indutny): kill connection on error */
   err = uv_ssl_cycle_input(s);
   if (err == 0)
     err = uv_ssl_cycle_pending(s);
@@ -260,7 +261,6 @@ void uv_ssl_write_cb(uv_link_t* link, int status, void* arg) {
 
   /* TODO(indutny): kill connection on error */
 
-  /* We may have some data left to send */
   uv_ssl_cycle(s);
 }
 
