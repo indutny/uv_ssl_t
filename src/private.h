@@ -68,5 +68,7 @@ int uv_ssl_write(uv_ssl_t* ssl, uv_link_t* source, const uv_buf_t bufs[],
                  unsigned int nbufs, uv_link_write_cb cb, void* arg);
 int uv_ssl_sync_write(uv_ssl_t* ssl, const uv_buf_t bufs[],
                       unsigned int nbufs);
+int uv_ssl_shutdown(uv_ssl_t* ssl, uv_link_t* source, uv_link_shutdown_cb cb,
+                    void* arg);
 
 #endif  /* SRC_PRIVATE_H_ */

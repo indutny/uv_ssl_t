@@ -104,16 +104,10 @@ int uv_ssl_link_try_write(uv_link_t* link, const uv_buf_t bufs[],
 int uv_ssl_link_shutdown(uv_link_t* link, uv_link_t* source,
                          uv_link_shutdown_cb cb, void* arg) {
   uv_ssl_t* ssl;
-  int err;
 
   ssl = container_of(link, uv_ssl_t, link);
 
-  err = uv_ssl_pop_error(ssl);
-  if (err != 0)
-    return err;
-
-  /* TODO(indutny): SSL_shutdown() */
-  return uv_link_shutdown(link->parent, source, cb, arg);
+  return uv_ssl_shutdown(ssl, source, cb, arg);
 }
 
 

@@ -427,6 +427,25 @@ int uv_ssl_sync_write(uv_ssl_t* ssl, const uv_buf_t bufs[],
 }
 
 
+int uv_ssl_shutdown(uv_ssl_t* ssl, uv_link_t* source, uv_link_shutdown_cb cb,
+                    void* arg) {
+  int err;
+
+  err = uv_ssl_pop_error(ssl);
+  if (err != 0)
+    return err;
+
+  if (SSL_shutdown(ssl->ssl) == 0)
+    SSL_shutdown(ssl->ssl);
+
+  err = uv_ssl_cycle(ssl);
+  if (err != 0)
+    return err;
+
+  return uv_link_shutdown(ssl->link.parent, source, cb, arg);
+}
+
+
 void uv_ssl_error(uv_ssl_t* ssl, int err, const char* desc) {
   /* Lucky case, user is prepared to handle async error */
   if (ssl->state == kSSLStateData)
