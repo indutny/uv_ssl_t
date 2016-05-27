@@ -18,7 +18,8 @@
 
     "sources": [
       "src/main.c",
-      "src/test-uv-ssl-t.c",
+      "src/test-handshake.c",
+      "src/test-read-incoming.c",
     ],
   }],
 }
