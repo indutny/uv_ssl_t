@@ -77,12 +77,13 @@ int uv_ssl_write(uv_link_t* link,
   char* p;
   size_t extra_size;
   uv_ssl_write_t* req;
+  int err;
+  int bytes;
 
   ssl = container_of(link, uv_ssl_t, link);
 
+  bytes = 0;
   for (i = 0; i < nbufs; i++) {
-    int bytes;
-
     bytes = SSL_write(ssl->ssl, bufs[i].base, bufs[i].len);
     if (bytes == -1)
       break;
@@ -93,13 +94,20 @@ int uv_ssl_write(uv_link_t* link,
 
   /* All written immediately */
   if (i == nbufs) {
-    int err;
-
     err = uv_ssl_queue_write_cb(ssl, source, cb);
     if (err != 0)
       return err;
 
     return uv_ssl_cycle(ssl);
+  }
+
+  err = nbufs != 0 ? SSL_get_error(ssl->ssl, bytes) : 0;
+  if (err == SSL_ERROR_WANT_READ ||
+      err == SSL_ERROR_WANT_WRITE ||
+      err == SSL_ERROR_WANT_X509_LOOKUP) {
+    err = 0;
+  } else if (err != 0) {
+    return UV_EPROTO;
   }
 
   /* Only buffers before `i` were written, queue rest */
@@ -129,8 +137,39 @@ int uv_ssl_write(uv_link_t* link,
 int uv_ssl_try_write(uv_link_t* link,
                      const uv_buf_t bufs[],
                      unsigned int nbufs) {
-  /* No try_write for uv_ssl_t */
-  return 0;
+  uv_ssl_t* ssl;
+  unsigned int i;
+  size_t total;
+  int bytes;
+  int err;
+
+  ssl = container_of(link, uv_ssl_t, link);
+
+  total = 0;
+  for (i = 0; i < nbufs; i++) {
+    bytes = SSL_write(ssl->ssl, bufs[i].base, bufs[i].len);
+    if (bytes == -1)
+      break;
+
+    CHECK_EQ(bytes, (int) bufs[i].len,
+             "SSL_write() does not do partial writes");
+    total += bytes;
+  }
+
+  err = nbufs != 0 ? SSL_get_error(ssl->ssl, bytes) : 0;
+  if (err == SSL_ERROR_WANT_READ ||
+      err == SSL_ERROR_WANT_WRITE ||
+      err == SSL_ERROR_WANT_X509_LOOKUP) {
+    err = 0;
+  } else if (err != 0) {
+    return UV_EPROTO;
+  }
+
+  err = uv_ssl_cycle(ssl);
+  if (err != 0)
+    return err;
+
+  return total;
 }
 
 
