@@ -66,104 +66,24 @@ int uv_ssl_link_write(uv_link_t* link, uv_link_t* source, const uv_buf_t bufs[],
                       unsigned int nbufs, uv_stream_t* send_handle,
                       uv_link_write_cb cb, void* arg) {
   uv_ssl_t* ssl;
-  unsigned int i;
-  unsigned int j;
-  char* p;
-  size_t extra_size;
-  uv_ssl_write_req_t* req;
-  int err;
-  int bytes;
+
+  /* No IPC writes on uv_ssl_t */
+  if (send_handle != NULL)
+    return UV_EPROTO;
 
   ssl = container_of(link, uv_ssl_t, link);
 
-  bytes = 0;
-  for (i = 0; i < nbufs; i++) {
-    bytes = SSL_write(ssl->ssl, bufs[i].base, bufs[i].len);
-    if (bytes == -1)
-      break;
-
-    CHECK_EQ(bytes, (int) bufs[i].len,
-             "SSL_write() does not do partial writes");
-  }
-
-  /* All written immediately */
-  if (i == nbufs) {
-    err = uv_ssl_queue_write_cb(ssl, source, cb, arg);
-    if (err != 0)
-      return err;
-
-    return uv_ssl_cycle(ssl);
-  }
-
-  err = nbufs != 0 ? SSL_get_error(ssl->ssl, bytes) : 0;
-  if (err == SSL_ERROR_WANT_READ ||
-      err == SSL_ERROR_WANT_WRITE ||
-      err == SSL_ERROR_WANT_X509_LOOKUP) {
-    err = 0;
-  } else if (err != 0) {
-    return UV_EPROTO;
-  }
-
-  /* Only buffers before `i` were written, queue rest */
-  extra_size = 0;
-  for (j = 0; j <= i; j++)
-    extra_size += bufs[i].len;
-
-  req = malloc(sizeof(*req) + extra_size);
-  if (req == NULL)
-    return UV_ENOMEM;
-
-  for (j = 0, p = uv_ssl_write_data(req); j <= i; j++, p += bufs[i].len)
-    memcpy(p, bufs[i].base, bufs[i].len);
-
-  req->link = link;
-  req->source = source;
-  req->size = extra_size;
-  req->send_handle = send_handle;
-  req->cb = cb;
-  req->arg = arg;
-
-  QUEUE_INSERT_TAIL(&ssl->write_queue, &req->member);
-
-  return uv_ssl_cycle(ssl);
+  return uv_ssl_write(ssl, source, bufs, nbufs, cb, arg);
 }
 
 
 int uv_ssl_link_try_write(uv_link_t* link, const uv_buf_t bufs[],
                           unsigned int nbufs) {
   uv_ssl_t* ssl;
-  unsigned int i;
-  size_t total;
-  int bytes;
-  int err;
 
   ssl = container_of(link, uv_ssl_t, link);
 
-  total = 0;
-  for (i = 0; i < nbufs; i++) {
-    bytes = SSL_write(ssl->ssl, bufs[i].base, bufs[i].len);
-    if (bytes == -1)
-      break;
-
-    CHECK_EQ(bytes, (int) bufs[i].len,
-             "SSL_write() does not do partial writes");
-    total += bytes;
-  }
-
-  err = nbufs != 0 ? SSL_get_error(ssl->ssl, bytes) : 0;
-  if (err == SSL_ERROR_WANT_READ ||
-      err == SSL_ERROR_WANT_WRITE ||
-      err == SSL_ERROR_WANT_X509_LOOKUP) {
-    err = 0;
-  } else if (err != 0) {
-    return UV_EPROTO;
-  }
-
-  err = uv_ssl_cycle(ssl);
-  if (err != 0)
-    return err;
-
-  return total;
+  return uv_ssl_sync_write(ssl, bufs, nbufs);
 }
 
 

@@ -42,10 +42,8 @@ struct uv_ssl_s {
 struct uv_ssl_write_req_s {
   QUEUE member;
 
-  uv_link_t* link;
   uv_link_t* source;
   size_t size;
-  uv_stream_t* send_handle;
   uv_link_write_cb cb;
   void* arg;
 };
@@ -59,11 +57,9 @@ struct uv_ssl_write_cb_wrap_s {
 };
 
 int uv_ssl_cycle(uv_ssl_t* ssl);
-int uv_ssl_queue_write_cb(uv_ssl_t* ssl, uv_link_t* source,
-                          uv_link_write_cb cb, void* arg);
-
-static char* uv_ssl_write_data(uv_ssl_write_req_t* req) {
-  return (char*) req + sizeof(*req);
-}
+int uv_ssl_write(uv_ssl_t* ssl, uv_link_t* source, const uv_buf_t bufs[],
+                 unsigned int nbufs, uv_link_write_cb cb, void* arg);
+int uv_ssl_sync_write(uv_ssl_t* ssl, const uv_buf_t bufs[],
+                      unsigned int nbufs);
 
 #endif  /* SRC_PRIVATE_H_ */
