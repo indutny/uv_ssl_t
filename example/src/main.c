@@ -51,6 +51,7 @@ static void read_cb(uv_link_observer_t* observer,
     fprintf(stderr, "error or close\n");
     uv_link_read_stop(&observer->link);
     uv_ssl_destroy(client->ssl_link);
+    SSL_free(client->ssl);
     uv_close((uv_handle_t*) &client->tcp, NULL);
     free(client);
     return;
