@@ -7,6 +7,7 @@
     V(write)                                                                  \
     V(try_write)                                                              \
     V(shutdown)                                                               \
+    V(error_when_reading)                                                     \
 
 #define TEST_DECL(N) void test__##N();
 

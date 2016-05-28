@@ -17,6 +17,7 @@
     "sources": [
       "src/main.c",
       "src/test-handshake.c",
+      "src/test-error.c",
       "src/test-read-incoming.c",
       "src/test-shutdown.c",
       "src/test-try-write.c",
