@@ -155,10 +155,10 @@ void uv_ssl_read_cb_override(uv_link_t* link,
   }
 
   /* Handle EOF */
-  if (nread == UV_EOF) {
-    uv_link_read_stop(link);
+  if (nread == UV_EOF)
     return uv_ssl_error(ssl, UV_EPROTO, "unexpected UV_EOF");
-  }
+  else if (nread < 0)
+    return uv_ssl_error(ssl, nread, "unexpected error");
 
   r = uv_ssl_cycle(ssl);
 

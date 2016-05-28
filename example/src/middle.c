@@ -45,7 +45,8 @@ static void read_cb_override(uv_link_t* link,
     else
       res = "go away";
   } else {
-    free(buf->base);
+    if (buf != NULL)
+      free(buf->base);
     uv_link_propagate_read_cb(link, nread, NULL);
     return;
   }

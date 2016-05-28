@@ -3,21 +3,18 @@
 static int read_cb_called;
 
 
-static void error_client() {
+static void error_on_eof_client() {
   int err;
-  char buf[1024];
-
-  memset(buf, 'x', sizeof(buf));
 
   do
-    err = write(fds[0], buf, sizeof(buf));
+    err = shutdown(fds[0], SHUT_RDWR);
   while (err == -1 && errno == EINTR);
 }
 
 
-static void error_read_cb(uv_link_observer_t* observer,
-                          ssize_t nread,
-                          const uv_buf_t* buf) {
+static void error_on_eof_read_cb(uv_link_observer_t* observer,
+                                 ssize_t nread,
+                                 const uv_buf_t* buf) {
   if (nread == 0)
     return;
 
@@ -29,8 +26,8 @@ static void error_read_cb(uv_link_observer_t* observer,
 }
 
 
-static void error_server() {
-  server.observer.read_cb = error_read_cb;
+static void error_on_eof_server() {
+  server.observer.read_cb = error_on_eof_read_cb;
 
   read_cb_called = 0;
   CHECK_EQ(uv_run(loop, UV_RUN_DEFAULT), 0, "uv_run()");
@@ -38,6 +35,6 @@ static void error_server() {
 }
 
 
-TEST_IMPL(error_when_reading) {
-  ssl_client_server_test(error_client, error_server);
+TEST_IMPL(error_on_eof) {
+  ssl_client_server_test(error_on_eof_client, error_on_eof_server);
 }

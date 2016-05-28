@@ -471,11 +471,20 @@ int uv_ssl_shutdown(uv_ssl_t* ssl, uv_link_t* source, uv_link_shutdown_cb cb,
 
 
 void uv_ssl_error(uv_ssl_t* ssl, int err, const char* desc) {
+  uv_ssl_state_t state;
+
+  state = ssl->state;
+
+  if (state == kSSLStateHandshake)
+    uv_ssl_handshake_read_stop(ssl);
+  else if (state == kSSLStateData)
+    uv_link_read_stop(&ssl->link);
+
   /* Lucky case, user is prepared to handle async error */
-  if (ssl->state == kSSLStateData)
+  if (state == kSSLStateData)
     return uv_link_propagate_read_cb(&ssl->link, err, NULL);
 
-  if (ssl->state == kSSLStateError)
+  if (state == kSSLStateError)
     return;
 
   /* Queue error for later */
