@@ -46,6 +46,7 @@ static void close_cb(uv_link_t* link) {
   client_t* client;
 
   client = link->data;
+  SSL_free(client->ssl);
   free(client);
 }
 
