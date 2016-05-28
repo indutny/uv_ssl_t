@@ -13,6 +13,8 @@ static int uv_ssl_link_try_write(uv_link_t* link, const uv_buf_t bufs[],
                                  unsigned int nbufs);
 static int uv_ssl_link_shutdown(uv_link_t* link, uv_link_t* source,
                                 uv_link_shutdown_cb cb, void* arg);
+static void uv_ssl_link_close(uv_link_t* link, uv_link_t* source,
+                              uv_link_close_cb cb);
 static void uv_ssl_alloc_cb_override(uv_link_t* link,
                                      size_t suggested_size,
                                      uv_buf_t* buf);
@@ -28,6 +30,7 @@ uv_link_methods_t uv_ssl_methods = {
   .try_write = uv_ssl_link_try_write,
 
   .shutdown = uv_ssl_link_shutdown,
+  .close = uv_ssl_link_close,
 
   .alloc_cb_override = uv_ssl_alloc_cb_override,
   .read_cb_override = uv_ssl_read_cb_override
@@ -108,6 +111,15 @@ int uv_ssl_link_shutdown(uv_link_t* link, uv_link_t* source,
   ssl = container_of(link, uv_ssl_t, link);
 
   return uv_ssl_shutdown(ssl, source, cb, arg);
+}
+
+
+void uv_ssl_link_close(uv_link_t* link, uv_link_t* source,
+                       uv_link_close_cb cb) {
+  uv_ssl_t* ssl;
+
+  ssl = container_of(link, uv_ssl_t, link);
+  uv_ssl_destroy(ssl, source, cb);
 }
 
 

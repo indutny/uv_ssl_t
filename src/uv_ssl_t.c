@@ -5,6 +5,7 @@
 #include "src/bio.h"
 #include "src/link_methods.h"
 
+static void uv_ssl_init_close_cb(uv_handle_t* handle);
 static void uv_ssl_check_close_cb(uv_handle_t* handle);
 static int uv_ssl_cycle_input(uv_ssl_t* s);
 static int uv_ssl_cycle_output(uv_ssl_t* s);
@@ -33,10 +34,6 @@ uv_ssl_t* uv_ssl_create(uv_loop_t* loop, SSL* ssl, int* err) {
   ringbuffer_init(&res->encrypted.input);
   ringbuffer_init(&res->encrypted.output);
 
-  *err = uv_link_init(&res->link, &uv_ssl_methods);
-  if (*err != 0)
-    goto fail;
-
   res->ssl = ssl;
   rbio = uv_ssl_bio_new(&res->encrypted.input);
   wbio = uv_ssl_bio_new(&res->encrypted.output);
@@ -53,23 +50,33 @@ uv_ssl_t* uv_ssl_create(uv_loop_t* loop, SSL* ssl, int* err) {
   if (*err != 0)
     goto fail_bio;
 
+  *err = uv_link_init(&res->link, &uv_ssl_methods);
+  if (*err != 0)
+    goto fail_link_init;
+
   return res;
 
+fail_link_init:
+  ringbuffer_destroy(&res->encrypted.input);
+  ringbuffer_destroy(&res->encrypted.output);
+  uv_close((uv_handle_t*) &res->write_cb_check, uv_ssl_init_close_cb);
+  return NULL;
+
 fail_bio:
+  ringbuffer_destroy(&res->encrypted.input);
+  ringbuffer_destroy(&res->encrypted.output);
+
   if (rbio != NULL)
     BIO_free_all(rbio);
   if (wbio != NULL)
     BIO_free_all(wbio);
 
-  uv_link_close(&res->link);
-
-fail:
   free(res);
   return NULL;
 }
 
 
-void uv_ssl_check_close_cb(uv_handle_t* handle) {
+void uv_ssl_init_close_cb(uv_handle_t* handle) {
   uv_ssl_t* ssl;
 
   ssl = container_of(handle, uv_ssl_t, write_cb_check);
@@ -78,13 +85,30 @@ void uv_ssl_check_close_cb(uv_handle_t* handle) {
 }
 
 
-void uv_ssl_destroy(uv_ssl_t* s) {
+void uv_ssl_check_close_cb(uv_handle_t* handle) {
+  uv_ssl_t* ssl;
+  uv_link_t* source;
+  uv_link_close_cb close_cb;
+
+  ssl = container_of(handle, uv_ssl_t, write_cb_check);
+
+  source = ssl->close_source;
+  close_cb = ssl->close_cb;
+
+  free(ssl);
+
+  close_cb(source);
+}
+
+
+void uv_ssl_destroy(uv_ssl_t* s, uv_link_t* source, uv_link_close_cb cb) {
   ringbuffer_destroy(&s->encrypted.input);
   ringbuffer_destroy(&s->encrypted.output);
 
   /* NOTE: User is resposible for disposing ssl */
   s->ssl = NULL;
-  uv_link_close(&s->link);
+  s->close_source = source;
+  s->close_cb = cb;
   uv_close((uv_handle_t*) &s->write_cb_check, uv_ssl_check_close_cb);
 }
 

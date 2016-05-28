@@ -21,6 +21,7 @@
 
 static int fds[2];
 static uv_loop_t* loop;
+static int close_cb_called;
 
 static struct {
   uv_pipe_t pipe;
@@ -67,6 +68,11 @@ static void client_thread_body(void* arg) {
 fail:
   ERR_print_errors_fp(stderr);
   CHECK(0, "SSL_connect() != 0");
+}
+
+
+static void close_cb(uv_link_t* link) {
+  close_cb_called++;
 }
 
 
@@ -119,10 +125,13 @@ static void ssl_client_server_test(void (*client_fn)(void),
            "uv_link_chain(server.source.link)");
 
   /* Create observer */
-  CHECK_EQ(uv_link_observer_init(&server.observer,
-                                 uv_ssl_get_link(server.ssl_link)),
-           0,
+  CHECK_EQ(uv_link_observer_init(&server.observer), 0,
            "uv_link_observer_init(server.observer)");
+
+  CHECK_EQ(uv_link_chain(uv_ssl_get_link(server.ssl_link),
+                         &server.observer.link),
+           0,
+           "uv_link_chain(server.ssl_link)");
 
   /* Start client thread */
 
@@ -139,13 +148,10 @@ static void ssl_client_server_test(void (*client_fn)(void),
 
   /* Free resources */
 
-  CHECK_EQ(uv_link_observer_close(&server.observer), 0,
-           "uv_link_observer_close(server.observer)");
-  uv_ssl_destroy(server.ssl_link);
-  uv_link_source_close(&server.source);
-  uv_close((uv_handle_t*) &server.pipe, NULL);
+  uv_link_close(&server.observer.link, close_cb);
 
   CHECK_EQ(uv_run(loop, UV_RUN_DEFAULT), 0, "uv_run() post");
+  CHECK_EQ(close_cb_called, 1, "close_cb must be called");
 
   SSL_free(server.ssl);
   SSL_free(client.ssl);
@@ -156,6 +162,7 @@ static void ssl_client_server_test(void (*client_fn)(void),
   memset(&client, 0, sizeof(client));
 
   CHECK_EQ(close(fds[0]), 0, "close(fds[0])");
+  CHECK_NE(close(fds[1]), 0, "close(fds[1]) must fail");
 }
 
 #endif  /* TEST_SRC_TEST_COMMON_H_ */
