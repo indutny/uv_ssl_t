@@ -83,10 +83,11 @@ static void connection_cb(uv_stream_t* s, int status) {
       uv_ssl_create(uv_default_loop(), client->ssl, &err));
   CHECK(err);
 
-  CHECK(uv_link_chain(&client->source.link, uv_ssl_get_link(client->ssl_link)));
   CHECK(uv_link_init(&client->middle, &middle_methods));
-  CHECK(uv_link_chain(uv_ssl_get_link(client->ssl_link), &client->middle));
   CHECK(uv_link_observer_init(&client->observer));
+
+  CHECK(uv_link_chain(&client->source.link, uv_ssl_get_link(client->ssl_link)));
+  CHECK(uv_link_chain(uv_ssl_get_link(client->ssl_link), &client->middle));
   CHECK(uv_link_chain(&client->middle, &client->observer.link));
 
   client->observer.read_cb = read_cb;
