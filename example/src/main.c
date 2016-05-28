@@ -95,7 +95,7 @@ static void connection_cb(uv_stream_t* s, int status) {
   client->observer.observer_read_cb = read_cb;
   client->observer.data = client;
 
-  CHECK(uv_link_read_start(&client->observer.link));
+  CHECK(uv_link_read_start((uv_link_t*) &client->observer));
 }
 
 
