@@ -13,7 +13,8 @@ static void write_client() {
 
 static void write_cb(uv_link_t* link, int status, void* arg) {
   CHECK_EQ(status, 0, "write_cb() status");
-  CHECK_EQ(link, &server.observer.link, "write_cb() link must be server");
+  CHECK_EQ(link, (uv_link_t*) &server.observer,
+           "write_cb() link must be server");
   CHECK_EQ(arg, &test_arg, "write_cb() link arg be &test_arg");
 
   write_cb_called++;
@@ -24,7 +25,7 @@ static void write_server() {
   uv_link_t* serv;
   uv_buf_t buf;
 
-  serv = &server.observer.link;
+  serv = (uv_link_t*) &server.observer;
 
   CHECK_EQ(uv_link_read_stop(serv), 0, "uv_link_read_stop(server)");
 

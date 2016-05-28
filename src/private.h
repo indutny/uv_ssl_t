@@ -26,7 +26,7 @@ enum uv_ssl_state_e {
 typedef enum uv_ssl_state_e uv_ssl_state_t;
 
 struct uv_ssl_s {
-  uv_link_t link;
+  UV_LINK_FIELDS
 
   uv_link_t* close_source;
   uv_link_close_cb close_cb;

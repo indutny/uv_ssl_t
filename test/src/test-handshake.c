@@ -11,7 +11,7 @@ static void handshake_client() {
 static void handshake_info_cb(const SSL* ssl, int where, int val) {
   if ((where & SSL_CB_HANDSHAKE_DONE) != 0) {
     handshakes_done++;
-    CHECK_EQ(uv_link_read_stop(&server.observer.link), 0,
+    CHECK_EQ(uv_link_read_stop((uv_link_t*) &server.observer), 0,
              "uv_link_read_stop()");
   }
 }

@@ -55,11 +55,11 @@ static void read_cb(uv_link_observer_t* observer,
                     const uv_buf_t* buf) {
   client_t* client;
 
-  client = observer->link.data;
+  client = observer->data;
 
   if (nread < 0) {
     fprintf(stderr, "error or close\n");
-    uv_link_close(&observer->link, close_cb);
+    uv_link_close((uv_link_t*) observer, close_cb);
     return;
   }
 
@@ -87,12 +87,13 @@ static void connection_cb(uv_stream_t* s, int status) {
   CHECK(uv_link_init(&client->middle, &middle_methods));
   CHECK(uv_link_observer_init(&client->observer));
 
-  CHECK(uv_link_chain(&client->source.link, uv_ssl_get_link(client->ssl_link)));
-  CHECK(uv_link_chain(uv_ssl_get_link(client->ssl_link), &client->middle));
-  CHECK(uv_link_chain(&client->middle, &client->observer.link));
+  CHECK(uv_link_chain((uv_link_t*) &client->source,
+                      (uv_link_t*) client->ssl_link));
+  CHECK(uv_link_chain((uv_link_t*) client->ssl_link, &client->middle));
+  CHECK(uv_link_chain(&client->middle, (uv_link_t*) &client->observer));
 
-  client->observer.read_cb = read_cb;
-  client->observer.link.data = client;
+  client->observer.observer_read_cb = read_cb;
+  client->observer.data = client;
 
   CHECK(uv_link_read_start(&client->observer.link));
 }

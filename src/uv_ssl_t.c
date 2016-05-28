@@ -50,7 +50,7 @@ uv_ssl_t* uv_ssl_create(uv_loop_t* loop, SSL* ssl, int* err) {
   if (*err != 0)
     goto fail_bio;
 
-  *err = uv_link_init(&res->link, &uv_ssl_methods);
+  *err = uv_link_init((uv_link_t*) res, &uv_ssl_methods);
   if (*err != 0)
     goto fail_link_init;
 
@@ -113,11 +113,6 @@ void uv_ssl_destroy(uv_ssl_t* s, uv_link_t* source, uv_link_close_cb cb) {
 }
 
 
-uv_link_t* uv_ssl_get_link(uv_ssl_t* s) {
-  return &s->link;
-}
-
-
 int uv_ssl_cycle(uv_ssl_t* s) {
   int err;
 
@@ -144,13 +139,13 @@ int uv_ssl_cycle(uv_ssl_t* s) {
 
 int uv_ssl_handshake_read_start(uv_ssl_t* s) {
   s->state = kSSLStateHandshake;
-  return uv_link_read_start(s->link.parent);
+  return uv_link_read_start(s->parent);
 }
 
 
 int uv_ssl_handshake_read_stop(uv_ssl_t* s) {
   s->state = kSSLStateNone;
-  return uv_link_read_stop(s->link.parent);
+  return uv_link_read_stop(s->parent);
 }
 
 
@@ -165,9 +160,9 @@ int uv_ssl_cycle_input(uv_ssl_t* s) {
   if (s->state == kSSLStateData) {
     /* Reads were requested */
     do {
-      uv_link_propagate_alloc_cb(&s->link, kSuggestedSize, &buf);
+      uv_link_propagate_alloc_cb((uv_link_t*) s, kSuggestedSize, &buf);
       if (buf.len == 0) {
-        uv_link_propagate_read_cb(&s->link, UV_ENOBUFS, &buf);
+        uv_link_propagate_read_cb((uv_link_t*) s, UV_ENOBUFS, &buf);
         return -1;
       }
 
@@ -175,7 +170,7 @@ int uv_ssl_cycle_input(uv_ssl_t* s) {
       if (bytes <= 0)
         break;
 
-      uv_link_propagate_read_cb(&s->link, bytes, &buf);
+      uv_link_propagate_read_cb((uv_link_t*) s, bytes, &buf);
     } while (bytes > 0);
 
     err = SSL_get_error(s->ssl, bytes);
@@ -214,7 +209,7 @@ int uv_ssl_cycle_input(uv_ssl_t* s) {
   }
 
   if (s->state == kSSLStateData)
-    uv_link_propagate_read_cb(&s->link, err, &buf);
+    uv_link_propagate_read_cb((uv_link_t*) s, err, &buf);
 
   return err;
 }
@@ -241,8 +236,8 @@ int uv_ssl_cycle_pending(uv_ssl_t* s) {
     req = QUEUE_DATA(q, uv_ssl_write_req_t, member);
 
     buf = uv_buf_init(uv_ssl_get_write_data(req), req->size);
-    err = uv_link_propagate_write(&s->link, req->source, &buf, 1, NULL, req->cb,
-                                  req->arg);
+    err = uv_link_propagate_write((uv_link_t*) s, req->source, &buf, 1, NULL,
+                                  req->cb, req->arg);
     free(req);
 
     if (err != 0)
@@ -272,7 +267,7 @@ int uv_ssl_cycle_output(uv_ssl_t* s) {
 
   /* TODO(indutny): try_write first */
 
-  err = uv_link_propagate_write(s->link.parent, &s->link, buf, count, NULL,
+  err = uv_link_propagate_write(s->parent, (uv_link_t*) s, buf, count, NULL,
                                 uv_ssl_write_cb, NULL);
   if (err != 0)
     return err;
@@ -288,7 +283,7 @@ void uv_ssl_write_cb(uv_link_t* link, int status, void* arg) {
   uv_ssl_t* s;
   int err;
 
-  s = container_of(link, uv_ssl_t, link);
+  s = (uv_ssl_t*) link;
 
   err = uv_ssl_cycle(s);
   if (err != 0)
@@ -466,7 +461,7 @@ int uv_ssl_shutdown(uv_ssl_t* ssl, uv_link_t* source, uv_link_shutdown_cb cb,
   if (err != 0)
     return err;
 
-  return uv_link_propagate_shutdown(ssl->link.parent, source, cb, arg);
+  return uv_link_propagate_shutdown(ssl->parent, source, cb, arg);
 }
 
 
@@ -478,11 +473,11 @@ void uv_ssl_error(uv_ssl_t* ssl, int err, const char* desc) {
   if (state == kSSLStateHandshake)
     uv_ssl_handshake_read_stop(ssl);
   else if (state == kSSLStateData)
-    uv_link_read_stop(&ssl->link);
+    uv_link_read_stop((uv_link_t*) ssl);
 
   /* Lucky case, user is prepared to handle async error */
   if (state == kSSLStateData)
-    return uv_link_propagate_read_cb(&ssl->link, err, NULL);
+    return uv_link_propagate_read_cb((uv_link_t*) ssl, err, NULL);
 
   if (state == kSSLStateError)
     return;

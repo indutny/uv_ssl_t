@@ -42,7 +42,7 @@ int uv_ssl_link_read_start(uv_link_t* link) {
   int internal;
   int err;
 
-  ssl = container_of(link, uv_ssl_t, link);
+  ssl = (uv_ssl_t*) link;
 
   err = uv_ssl_pop_error(ssl);
   if (err != 0)
@@ -67,7 +67,7 @@ int uv_ssl_link_read_stop(uv_link_t* link) {
   uv_ssl_t* ssl;
   int err;
 
-  ssl = container_of(link, uv_ssl_t, link);
+  ssl = (uv_ssl_t*) link;
 
   err = uv_ssl_pop_error(ssl);
   if (err != 0)
@@ -88,7 +88,7 @@ int uv_ssl_link_write(uv_link_t* link, uv_link_t* source, const uv_buf_t bufs[],
   if (send_handle != NULL)
     return UV_EPROTO;
 
-  ssl = container_of(link, uv_ssl_t, link);
+  ssl = (uv_ssl_t*) link;
 
   return uv_ssl_write(ssl, source, bufs, nbufs, cb, arg);
 }
@@ -98,7 +98,7 @@ int uv_ssl_link_try_write(uv_link_t* link, const uv_buf_t bufs[],
                           unsigned int nbufs) {
   uv_ssl_t* ssl;
 
-  ssl = container_of(link, uv_ssl_t, link);
+  ssl = (uv_ssl_t*) link;
 
   return uv_ssl_sync_write(ssl, bufs, nbufs);
 }
@@ -108,7 +108,7 @@ int uv_ssl_link_shutdown(uv_link_t* link, uv_link_t* source,
                          uv_link_shutdown_cb cb, void* arg) {
   uv_ssl_t* ssl;
 
-  ssl = container_of(link, uv_ssl_t, link);
+  ssl = (uv_ssl_t*) link;
 
   return uv_ssl_shutdown(ssl, source, cb, arg);
 }
@@ -118,7 +118,7 @@ void uv_ssl_link_close(uv_link_t* link, uv_link_t* source,
                        uv_link_close_cb cb) {
   uv_ssl_t* ssl;
 
-  ssl = container_of(link, uv_ssl_t, link);
+  ssl = (uv_ssl_t*) link;
   uv_ssl_destroy(ssl, source, cb);
 }
 
@@ -130,7 +130,7 @@ void uv_ssl_alloc_cb_override(uv_link_t* link,
   size_t avail;
   char* ptr;
 
-  ssl = container_of(link, uv_ssl_t, link);
+  ssl = (uv_ssl_t*) link;
 
   avail = 0;
   ptr = ringbuffer_write_ptr(&ssl->encrypted.input, &avail);
@@ -144,7 +144,7 @@ void uv_ssl_read_cb_override(uv_link_t* link,
   int r;
   uv_ssl_t* ssl;
 
-  ssl = container_of(link, uv_ssl_t, link);
+  ssl = (uv_ssl_t*) link;
 
   /* Commit data if there was no error */
   r = 0;

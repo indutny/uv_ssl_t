@@ -119,17 +119,17 @@ static void ssl_client_server_test(void (*client_fn)(void),
   SSL_set_connect_state(client.ssl);
   SSL_set_fd(client.ssl, fds[0]);
 
-  CHECK_EQ(uv_link_chain(&server.source.link,
-                         uv_ssl_get_link(server.ssl_link)),
+  CHECK_EQ(uv_link_chain((uv_link_t*) &server.source,
+                         (uv_link_t*) server.ssl_link),
            0,
-           "uv_link_chain(server.source.link)");
+           "uv_link_chain(server.source)");
 
   /* Create observer */
   CHECK_EQ(uv_link_observer_init(&server.observer), 0,
            "uv_link_observer_init(server.observer)");
 
-  CHECK_EQ(uv_link_chain(uv_ssl_get_link(server.ssl_link),
-                         &server.observer.link),
+  CHECK_EQ(uv_link_chain((uv_link_t*) server.ssl_link,
+                         (uv_link_t*) &server.observer),
            0,
            "uv_link_chain(server.ssl_link)");
 
@@ -139,7 +139,7 @@ static void ssl_client_server_test(void (*client_fn)(void),
            "uv_thread_create(client.thread)");
 
   /* Pre-start server */
-  CHECK_EQ(uv_link_read_start(&server.observer.link), 0,
+  CHECK_EQ(uv_link_read_start((uv_link_t*) &server.observer), 0,
            "uv_link_read_start()");
 
   server_fn();
@@ -148,7 +148,7 @@ static void ssl_client_server_test(void (*client_fn)(void),
 
   /* Free resources */
 
-  uv_link_close(&server.observer.link, close_cb);
+  uv_link_close((uv_link_t*) &server.observer, close_cb);
 
   CHECK_EQ(uv_run(loop, UV_RUN_DEFAULT), 0, "uv_run() post");
   CHECK_EQ(close_cb_called, 1, "close_cb must be called");

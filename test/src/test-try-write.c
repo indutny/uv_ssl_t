@@ -12,7 +12,7 @@ static void write_client() {
 
 static void write_info_cb(const SSL* ssl, int where, int val) {
   if ((where & SSL_CB_HANDSHAKE_DONE) != 0) {
-    CHECK_EQ(uv_link_read_stop(&server.observer.link), 0,
+    CHECK_EQ(uv_link_read_stop((uv_link_t*) &server.observer), 0,
              "uv_link_read_stop(server)");
     handshakes_done++;
   }
@@ -23,7 +23,7 @@ static void write_server() {
   uv_buf_t buf;
   uv_link_t* serv;
 
-  serv = &server.observer.link;
+  serv = (uv_link_t*) &server.observer;
   SSL_set_info_callback(server.ssl, write_info_cb);
 
   CHECK_EQ(uv_run(loop, UV_RUN_DEFAULT), 0, "uv_run()");

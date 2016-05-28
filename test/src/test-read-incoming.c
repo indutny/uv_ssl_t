@@ -20,13 +20,13 @@ static void read_incoming_read_cb(uv_link_observer_t* observer,
 
   read_cb_called++;
 
-  CHECK_EQ(uv_link_read_stop(&server.observer.link), 0,
-           "uv_link_read_stop(server.observer.link)");
+  CHECK_EQ(uv_link_read_stop((uv_link_t*) &server.observer), 0,
+           "uv_link_read_stop(server.observer)");
 }
 
 
 static void read_incoming_server() {
-  server.observer.read_cb = read_incoming_read_cb;
+  server.observer.observer_read_cb = read_incoming_read_cb;
 
   read_cb_called = 0;
   CHECK_EQ(uv_run(loop, UV_RUN_DEFAULT), 0, "uv_run()");

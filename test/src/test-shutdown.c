@@ -14,7 +14,7 @@ static void shutdown_client() {
 
 
 static void shutdown_cb(uv_link_t* link, int status, void* arg) {
-  CHECK_EQ(link, &server.observer.link, "shutdown_cb link");
+  CHECK_EQ(link, (uv_link_t*) &server.observer, "shutdown_cb link");
   CHECK_EQ(arg, &test_arg, "shutdown_cb arg");
 
   shutdown_called++;
@@ -23,7 +23,7 @@ static void shutdown_cb(uv_link_t* link, int status, void* arg) {
 
 static void write_info_cb(const SSL* ssl, int where, int val) {
   if ((where & SSL_CB_HANDSHAKE_DONE) != 0) {
-    CHECK_EQ(uv_link_read_stop(&server.observer.link), 0,
+    CHECK_EQ(uv_link_read_stop((uv_link_t*) &server.observer), 0,
              "uv_link_read_stop(server)");
     handshakes_done++;
   }
@@ -33,7 +33,7 @@ static void write_info_cb(const SSL* ssl, int where, int val) {
 static void shutdown_server() {
   uv_link_t* serv;
 
-  serv = &server.observer.link;
+  serv = (uv_link_t*) &server.observer;
   SSL_set_info_callback(server.ssl, write_info_cb);
 
   CHECK_EQ(uv_run(loop, UV_RUN_DEFAULT), 0, "uv_run()");
