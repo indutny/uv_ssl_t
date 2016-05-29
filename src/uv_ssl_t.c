@@ -257,6 +257,7 @@ int uv_ssl_cycle_output(uv_ssl_t* s) {
   size_t i;
   int err;
 
+restart:
   count = ARRAY_SIZE(out);
   avail = ringbuffer_read_nextv(&s->encrypted.output, out, size, &count);
   if (avail == 0)
@@ -265,8 +266,34 @@ int uv_ssl_cycle_output(uv_ssl_t* s) {
   for (i = 0; i < count; i++)
     buf[i] = uv_buf_init(out[i], size[i]);
 
-  /* TODO(indutny): try_write first */
+  err = uv_link_try_write(s->parent, buf, count);
 
+
+  /* Skip written bytes */
+  if (err > 0)
+    ringbuffer_read_skip(&s->encrypted.output, err);
+
+  /* Wrote everything at once */
+  if (err == (int) avail)
+    goto restart;
+
+  /* No support for try_write */
+  if (err == UV_ENOSYS || err == UV_EAGAIN)
+    err = 0;
+  /* Real error */
+  else if (err < 0)
+    return err;
+
+  /* Reload buffers */
+  count = ARRAY_SIZE(out);
+  avail = ringbuffer_read_nextv(&s->encrypted.output, out, size, &count);
+  if (avail == 0)
+    return 0;
+
+  for (i = 0; i < count; i++)
+    buf[i] = uv_buf_init(out[i], size[i]);
+
+  /* Write the reset asynchronously */
   err = uv_link_propagate_write(s->parent, (uv_link_t*) s, buf, count, NULL,
                                 uv_ssl_write_cb, NULL);
   if (err != 0)
