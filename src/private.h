@@ -32,8 +32,10 @@ struct uv_ssl_s {
   uv_link_close_cb close_cb;
 
   SSL* ssl;
-  uv_check_t write_cb_check;
+  uv_prepare_t write_cb_prepare;
+  uv_idle_t write_cb_idle;
   int pending_err;
+  size_t pending_write;
 
   uv_ssl_state_t state;
   unsigned int cycle:1;
@@ -61,6 +63,8 @@ struct uv_ssl_write_cb_wrap_s {
   uv_link_t* source;
   uv_link_write_cb cb;
   void* arg;
+
+  unsigned int pending:1;
 };
 
 void uv_ssl_destroy(uv_ssl_t* s, uv_link_t* source, uv_link_close_cb cb);

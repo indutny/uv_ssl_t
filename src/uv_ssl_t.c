@@ -6,7 +6,7 @@
 #include "src/link_methods.h"
 
 static void uv_ssl_init_close_cb(uv_handle_t* handle);
-static void uv_ssl_check_close_cb(uv_handle_t* handle);
+static void uv_ssl_idle_close_cb(uv_handle_t* handle);
 static int uv_ssl_cycle_input(uv_ssl_t* s);
 static int uv_ssl_cycle_output(uv_ssl_t* s);
 static int uv_ssl_cycle_pending(uv_ssl_t* s);
@@ -15,6 +15,7 @@ static int uv_ssl_handshake_read_stop(uv_ssl_t* s);
 static void uv_ssl_write_cb(uv_link_t* link, int status, void* arg);
 static int uv_ssl_queue_write_cb(uv_ssl_t* ssl, uv_link_t* source,
                                  uv_link_write_cb cb, void* arg);
+static void uv_ssl_flush_write_cb(uv_idle_t* handle);
 static char* uv_ssl_get_write_data(uv_ssl_write_req_t* req);
 
 uv_ssl_t* uv_ssl_create(uv_loop_t* loop, SSL* ssl, int* err) {
@@ -46,7 +47,7 @@ uv_ssl_t* uv_ssl_create(uv_loop_t* loop, SSL* ssl, int* err) {
   rbio = NULL;
   wbio = NULL;
 
-  *err = uv_check_init(loop, &res->write_cb_check);
+  *err = uv_idle_init(loop, &res->write_cb_idle);
   if (*err != 0)
     goto fail_bio;
 
@@ -59,7 +60,7 @@ uv_ssl_t* uv_ssl_create(uv_loop_t* loop, SSL* ssl, int* err) {
 fail_link_init:
   ringbuffer_destroy(&res->encrypted.input);
   ringbuffer_destroy(&res->encrypted.output);
-  uv_close((uv_handle_t*) &res->write_cb_check, uv_ssl_init_close_cb);
+  uv_close((uv_handle_t*) &res->write_cb_idle, uv_ssl_init_close_cb);
   return NULL;
 
 fail_bio:
@@ -79,18 +80,18 @@ fail_bio:
 void uv_ssl_init_close_cb(uv_handle_t* handle) {
   uv_ssl_t* ssl;
 
-  ssl = container_of(handle, uv_ssl_t, write_cb_check);
+  ssl = container_of(handle, uv_ssl_t, write_cb_idle);
 
   free(ssl);
 }
 
 
-void uv_ssl_check_close_cb(uv_handle_t* handle) {
+void uv_ssl_idle_close_cb(uv_handle_t* handle) {
   uv_ssl_t* ssl;
   uv_link_t* source;
   uv_link_close_cb close_cb;
 
-  ssl = container_of(handle, uv_ssl_t, write_cb_check);
+  ssl = container_of(handle, uv_ssl_t, write_cb_idle);
 
   source = ssl->close_source;
   close_cb = ssl->close_cb;
@@ -109,7 +110,7 @@ void uv_ssl_destroy(uv_ssl_t* s, uv_link_t* source, uv_link_close_cb cb) {
   s->ssl = NULL;
   s->close_source = source;
   s->close_cb = cb;
-  uv_close((uv_handle_t*) &s->write_cb_check, uv_ssl_check_close_cb);
+  uv_close((uv_handle_t*) &s->write_cb_idle, uv_ssl_idle_close_cb);
 }
 
 
@@ -268,7 +269,6 @@ restart:
 
   err = uv_link_try_write(s->parent, buf, count);
 
-
   /* Skip written bytes */
   if (err > 0)
     ringbuffer_read_skip(&s->encrypted.output, err);
@@ -295,12 +295,13 @@ restart:
 
   /* Write the reset asynchronously */
   err = uv_link_propagate_write(s->parent, (uv_link_t*) s, buf, count, NULL,
-                                uv_ssl_write_cb, NULL);
+                                uv_ssl_write_cb, (void*) (uintptr_t) avail);
   if (err != 0)
     return err;
 
   /* Consume data that was sent */
   ringbuffer_read_skip(&s->encrypted.output, avail);
+  s->pending_write += avail;
 
   return 0;
 }
@@ -309,24 +310,30 @@ restart:
 void uv_ssl_write_cb(uv_link_t* link, int status, void* arg) {
   uv_ssl_t* s;
   int err;
+  uintptr_t write_size;
 
   s = (uv_ssl_t*) link;
+  write_size = (uintptr_t) arg;
 
   err = uv_ssl_cycle(s);
   if (err != 0)
-    uv_ssl_error(s, err, "uv_ssl_write_cb");
+    return uv_ssl_error(s, err, "uv_ssl_write_cb");
+
+  s->pending_write -= (size_t) write_size;
+
+  uv_ssl_flush_write_cb(&s->write_cb_idle);
 }
 
 
-void uv_ssl_flush_write_cb(uv_check_t* handle) {
+void uv_ssl_flush_write_cb(uv_idle_t* handle) {
   uv_ssl_t* ssl;
   QUEUE write_cb_queue;
   QUEUE* q;
   QUEUE* next;
 
-  CHECK_EQ(uv_check_stop(handle), 0, "uv_check_stop() can't fail");
+  CHECK_EQ(uv_idle_stop(handle), 0, "uv_idle_stop() can't fail");
 
-  ssl = container_of(handle, uv_ssl_t, write_cb_check);
+  ssl = container_of(handle, uv_ssl_t, write_cb_idle);
 
   QUEUE_MOVE(&ssl->write_cb_queue, &write_cb_queue);
   QUEUE_INIT(&ssl->write_cb_queue);
@@ -337,6 +344,12 @@ void uv_ssl_flush_write_cb(uv_check_t* handle) {
     next = QUEUE_NEXT(q);
     wrap = QUEUE_DATA(q, uv_ssl_write_cb_wrap_t, member);
 
+    /* Reinsert pending writes */
+    if (wrap->pending && ssl->pending_write != 0) {
+      QUEUE_INSERT_TAIL(&ssl->write_cb_queue, &wrap->member);
+      continue;
+    }
+
     wrap->cb(wrap->source, 0, wrap->arg);
     free(wrap);
   }
@@ -346,6 +359,11 @@ void uv_ssl_flush_write_cb(uv_check_t* handle) {
 int uv_ssl_queue_write_cb(uv_ssl_t* ssl, uv_link_t* source,
                           uv_link_write_cb cb, void* arg) {
   uv_ssl_write_cb_wrap_t* wrap;
+  int err;
+
+  err = uv_ssl_cycle(ssl);
+  if (err != 0)
+    return err;
 
   wrap = malloc(sizeof(*wrap));
   if (wrap == NULL)
@@ -354,11 +372,12 @@ int uv_ssl_queue_write_cb(uv_ssl_t* ssl, uv_link_t* source,
   wrap->source = source;
   wrap->cb = cb;
   wrap->arg = arg;
+  wrap->pending = ssl->pending_write != 0;
 
   QUEUE_INSERT_TAIL(&ssl->write_cb_queue, &wrap->member);
 
-  if (!uv_is_active((uv_handle_t*) &ssl->write_cb_check))
-    return uv_check_start(&ssl->write_cb_check, uv_ssl_flush_write_cb);
+  if (!wrap->pending && !uv_is_active((uv_handle_t*) &ssl->write_cb_idle))
+    return uv_idle_start(&ssl->write_cb_idle, uv_ssl_flush_write_cb);
 
   return 0;
 }
@@ -394,13 +413,8 @@ int uv_ssl_write(uv_ssl_t* ssl, uv_link_t* source, const uv_buf_t bufs[],
   }
 
   /* All written immediately */
-  if (i == nbufs) {
-    err = uv_ssl_queue_write_cb(ssl, source, cb, arg);
-    if (err != 0)
-      return err;
-
-    return uv_ssl_cycle(ssl);
-  }
+  if (i == nbufs)
+    return uv_ssl_queue_write_cb(ssl, source, cb, arg);
 
   err = nbufs != 0 ? SSL_get_error(ssl->ssl, bytes) : 0;
   if (err == SSL_ERROR_WANT_READ ||
