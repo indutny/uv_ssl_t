@@ -208,8 +208,11 @@ int uv_ssl_cycle_input(uv_ssl_t* s) {
     err = uv_ssl_handshake_read_stop(s);
   }
 
-  if (s->state == kSSLStateData)
-    uv_link_propagate_read_cb((uv_link_t*) s, err, &buf);
+  if (s->state == kSSLStateData) {
+    if (err == 0)
+      uv_link_propagate_read_cb((uv_link_t*) s, err, &buf);
+    return err;
+  }
 
   return err;
 }
