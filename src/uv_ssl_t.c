@@ -579,6 +579,7 @@ int uv_ssl_setup_recommended_secure_context(SSL_CTX* ctx) {
   SSL_CTX_set_options(ctx, SSL_OP_SINGLE_DH_USE);
   SSL_CTX_set_options(ctx, SSL_OP_CIPHER_SERVER_PREFERENCE);
   SSL_CTX_set_options(ctx, SSL_OP_NO_COMPRESSION);
+  SSL_CTX_set_options(ctx, SSL_OP_NO_SESSION_RESUMPTION_ON_RENEGOTIATION);
   SSL_CTX_set_cipher_list(ctx,
       "ECDHE-RSA-AES128-GCM-SHA256:ECDHE-ECDSA-AES128-GCM-SHA256:"
       "ECDHE-RSA-AES256-GCM-SHA384:ECDHE-ECDSA-AES256-GCM-SHA384:"
