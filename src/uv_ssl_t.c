@@ -96,8 +96,8 @@ void uv_ssl_idle_close_cb(uv_handle_t* handle) {
   source = ssl->close_source;
   close_cb = ssl->close_cb;
 
-  ringbuffer_destroy(&s->encrypted.input);
-  ringbuffer_destroy(&s->encrypted.output);
+  ringbuffer_destroy(&ssl->encrypted.input);
+  ringbuffer_destroy(&ssl->encrypted.output);
 
   close_cb(source);
   free(ssl);
