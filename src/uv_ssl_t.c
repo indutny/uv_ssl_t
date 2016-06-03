@@ -232,6 +232,10 @@ int uv_ssl_cycle_pending(uv_ssl_t* s) {
   QUEUE* next;
   int err;
 
+  /* Destroyed */
+  if (s->ssl == NULL)
+    return 0;
+
   /* Writes won't succeed until handshake end */
   if (!SSL_is_init_finished(s->ssl))
     return 0;
