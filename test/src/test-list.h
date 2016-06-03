@@ -9,6 +9,7 @@
     V(shutdown)                                                               \
     V(error_when_reading)                                                     \
     V(error_on_eof)                                                           \
+    V(close_in_read_cb)                                                       \
 
 #define TEST_DECL(N) void test__##N();
 

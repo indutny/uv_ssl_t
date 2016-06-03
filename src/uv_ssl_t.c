@@ -116,10 +116,6 @@ void uv_ssl_destroy(uv_ssl_t* s, uv_link_t* source, uv_link_close_cb cb) {
 int uv_ssl_cycle(uv_ssl_t* s) {
   int err;
 
-  /* Destroyed */
-  if (s->ssl == NULL)
-    return 0;
-
   err = uv_ssl_pop_error(s);
   if (err != 0)
     return err;
@@ -158,10 +154,8 @@ int uv_ssl_cycle_input(uv_ssl_t* s) {
   uv_buf_t buf;
   int bytes;
   int err;
-  int needs_read;
 
   err = 0;
-  needs_read = 0;
 
   if (s->state == kSSLStateData) {
     /* Reads were requested */
@@ -172,17 +166,14 @@ int uv_ssl_cycle_input(uv_ssl_t* s) {
         return -1;
       }
 
-      needs_read = 1;
       bytes = SSL_read(s->ssl, buf.base, buf.len);
-      if (bytes <= 0)
+      if (bytes <= 0) {
+        /* Allow consuming stream to deallocate the data */
+        uv_link_propagate_read_cb((uv_link_t*) s, 0, &buf);
         break;
-
-      needs_read = 0;
-      uv_link_propagate_read_cb((uv_link_t*) s, bytes, &buf);
-
-      /* Freed in the middle */
-      if (s->ssl == NULL)
-        return 0;
+      } else {
+        uv_link_propagate_read_cb((uv_link_t*) s, bytes, &buf);
+      }
     } while (bytes > 0);
 
     err = SSL_get_error(s->ssl, bytes);
@@ -220,15 +211,6 @@ int uv_ssl_cycle_input(uv_ssl_t* s) {
     err = uv_ssl_handshake_read_stop(s);
   }
 
-  if (needs_read) {
-    needs_read = 0;
-    uv_link_propagate_read_cb((uv_link_t*) s, err, &buf);
-    /* Do not double-report error */
-    if (err != 0)
-      s->state = kSSLStateError;
-    return err;
-  }
-
   return err;
 }
 
@@ -238,10 +220,6 @@ int uv_ssl_cycle_pending(uv_ssl_t* s) {
   QUEUE* q;
   QUEUE* next;
   int err;
-
-  /* Destroyed */
-  if (s->ssl == NULL)
-    return 0;
 
   /* Writes won't succeed until handshake end */
   if (!SSL_is_init_finished(s->ssl))
@@ -278,10 +256,6 @@ int uv_ssl_cycle_output(uv_ssl_t* s) {
   size_t count;
   size_t i;
   int err;
-
-  /* Destroyed */
-  if (s->ssl == NULL)
-    return 0;
 
 restart:
   count = ARRAY_SIZE(out);
@@ -339,6 +313,9 @@ void uv_ssl_write_cb(uv_link_t* link, int status, void* arg) {
 
   s = (uv_ssl_t*) link;
   write_size = (uintptr_t) arg;
+
+  if (status != 0)
+    return uv_ssl_error(s, status, "uv_ssl_write_cb parent");
 
   err = uv_ssl_cycle(s);
   if (err != 0)
@@ -568,6 +545,9 @@ int uv_ssl_pop_error(uv_ssl_t* ssl) {
   ssl->pending_err = 0;
   return res;
 }
+
+
+/* Just a convenience method */
 
 
 int uv_ssl_setup_recommended_secure_context(SSL_CTX* ctx) {

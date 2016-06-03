@@ -23,6 +23,7 @@
       "src/test-shutdown.c",
       "src/test-try-write.c",
       "src/test-write.c",
+      "src/test-close-in-read-cb.c",
     ],
   }],
 }

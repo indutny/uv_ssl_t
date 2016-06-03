@@ -30,6 +30,7 @@ static struct {
   uv_ssl_t* ssl_link;
   SSL_CTX* ssl_ctx;
   SSL* ssl;
+  int closed;
 } server;
 
 
@@ -71,7 +72,7 @@ fail:
 }
 
 
-static void close_cb(uv_link_t* link) {
+static void common_close_cb(uv_link_t* link) {
   close_cb_called++;
 }
 
@@ -148,10 +149,12 @@ static void ssl_client_server_test(void (*client_fn)(void),
 
   /* Free resources */
 
-  uv_link_close((uv_link_t*) &server.observer, close_cb);
+  if (!server.closed) {
+    uv_link_close((uv_link_t*) &server.observer, common_close_cb);
 
-  CHECK_EQ(uv_run(loop, UV_RUN_DEFAULT), 0, "uv_run() post");
-  CHECK_EQ(close_cb_called, 1, "close_cb must be called");
+    CHECK_EQ(uv_run(loop, UV_RUN_DEFAULT), 0, "uv_run() post");
+    CHECK_EQ(close_cb_called, 1, "close_cb must be called");
+  }
 
   SSL_free(server.ssl);
   SSL_free(client.ssl);
