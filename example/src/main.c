@@ -117,6 +117,8 @@ int main() {
   SSL_CTX_use_certificate_file(ctx, "test/keys/cert.pem", SSL_FILETYPE_PEM);
   SSL_CTX_use_PrivateKey_file(ctx, "test/keys/key.pem", SSL_FILETYPE_PEM);
 
+  CHECK(uv_ssl_setup_recommended_secure_context(ctx));
+
   loop = uv_default_loop();
 
   CHECK(uv_tcp_init(loop, &server));

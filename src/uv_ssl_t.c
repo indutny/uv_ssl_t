@@ -568,3 +568,44 @@ int uv_ssl_pop_error(uv_ssl_t* ssl) {
   ssl->pending_err = 0;
   return res;
 }
+
+
+int uv_ssl_setup_recommended_secure_context(SSL_CTX* ctx) {
+  /* ECDHE */
+  {
+    int nid;
+    EC_KEY* ecdh;
+
+    nid = OBJ_sn2nid("prime256v1");
+    if (nid == NID_undef)
+      return -1;
+
+    ecdh = EC_KEY_new_by_curve_name(nid);
+    if (ecdh == NULL)
+      return -1;
+
+    /* TODO(indutny): verify return value? */
+    SSL_CTX_set_tmp_ecdh(ctx, ecdh);
+    EC_KEY_free(ecdh);
+  }
+
+  SSL_CTX_set_options(ctx, SSL_OP_NO_SSLv2);
+  SSL_CTX_set_options(ctx, SSL_OP_NO_SSLv3);
+  SSL_CTX_set_session_cache_mode(ctx,
+                                 SSL_SESS_CACHE_SERVER |
+                                 SSL_SESS_CACHE_NO_INTERNAL |
+                                 SSL_SESS_CACHE_NO_AUTO_CLEAR);
+  SSL_CTX_set_options(ctx, SSL_OP_SINGLE_ECDH_USE);
+  SSL_CTX_set_options(ctx, SSL_OP_SINGLE_DH_USE);
+  SSL_CTX_set_options(ctx, SSL_OP_CIPHER_SERVER_PREFERENCE);
+  SSL_CTX_set_options(ctx, SSL_OP_NO_COMPRESSION);
+  SSL_CTX_set_cipher_list(ctx,
+      "ECDHE-RSA-AES128-GCM-SHA256:ECDHE-ECDSA-AES128-GCM-SHA256:"
+      "ECDHE-RSA-AES256-GCM-SHA384:ECDHE-ECDSA-AES256-GCM-SHA384:"
+      "DHE-RSA-AES128-GCM-SHA256:ECDHE-RSA-AES128-SHA256:"
+      "DHE-RSA-AES128-SHA256:ECDHE-RSA-AES256-SHA384:DHE-RSA-AES256-SHA384:"
+      "ECDHE-RSA-AES256-SHA256:DHE-RSA-AES256-SHA256:HIGH:!aNULL:!eNULL:"
+      "!EXPORT:!DES:!RC4:!MD5:!PSK:!SRP:!CAMELLIA");
+
+  return 0;
+}
