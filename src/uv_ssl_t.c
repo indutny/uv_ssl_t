@@ -96,15 +96,15 @@ void uv_ssl_idle_close_cb(uv_handle_t* handle) {
   source = ssl->close_source;
   close_cb = ssl->close_cb;
 
+  ringbuffer_destroy(&s->encrypted.input);
+  ringbuffer_destroy(&s->encrypted.output);
+
   close_cb(source);
   free(ssl);
 }
 
 
 void uv_ssl_destroy(uv_ssl_t* s, uv_link_t* source, uv_link_close_cb cb) {
-  ringbuffer_destroy(&s->encrypted.input);
-  ringbuffer_destroy(&s->encrypted.output);
-
   /* NOTE: User is resposible for disposing ssl */
   s->ssl = NULL;
   s->close_source = source;
@@ -271,6 +271,10 @@ int uv_ssl_cycle_output(uv_ssl_t* s) {
   size_t count;
   size_t i;
   int err;
+
+  /* Destroyed */
+  if (s->ssl == NULL)
+    return 0;
 
 restart:
   count = ARRAY_SIZE(out);
