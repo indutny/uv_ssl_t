@@ -116,6 +116,10 @@ void uv_ssl_destroy(uv_ssl_t* s, uv_link_t* source, uv_link_close_cb cb) {
 int uv_ssl_cycle(uv_ssl_t* s) {
   int err;
 
+  /* Destroyed */
+  if (s->ssl == NULL)
+    return 0;
+
   err = uv_ssl_pop_error(s);
   if (err != 0)
     return err;
@@ -171,6 +175,10 @@ int uv_ssl_cycle_input(uv_ssl_t* s) {
         break;
 
       uv_link_propagate_read_cb((uv_link_t*) s, bytes, &buf);
+
+      /* Freed in the middle */
+      if (s->ssl == NULL)
+        return 0;
     } while (bytes > 0);
 
     err = SSL_get_error(s->ssl, bytes);
