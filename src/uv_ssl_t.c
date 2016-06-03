@@ -158,8 +158,10 @@ int uv_ssl_cycle_input(uv_ssl_t* s) {
   uv_buf_t buf;
   int bytes;
   int err;
+  int needs_read;
 
   err = 0;
+  needs_read = 0;
 
   if (s->state == kSSLStateData) {
     /* Reads were requested */
@@ -170,10 +172,12 @@ int uv_ssl_cycle_input(uv_ssl_t* s) {
         return -1;
       }
 
+      needs_read = 1;
       bytes = SSL_read(s->ssl, buf.base, buf.len);
       if (bytes <= 0)
         break;
 
+      needs_read = 0;
       uv_link_propagate_read_cb((uv_link_t*) s, bytes, &buf);
 
       /* Freed in the middle */
@@ -216,9 +220,12 @@ int uv_ssl_cycle_input(uv_ssl_t* s) {
     err = uv_ssl_handshake_read_stop(s);
   }
 
-  if (s->state == kSSLStateData) {
-    if (err == 0)
-      uv_link_propagate_read_cb((uv_link_t*) s, err, &buf);
+  if (needs_read) {
+    needs_read = 0;
+    uv_link_propagate_read_cb((uv_link_t*) s, err, &buf);
+    /* Do not double-report error */
+    if (err != 0)
+      s->state = kSSLStateError;
     return err;
   }
 
