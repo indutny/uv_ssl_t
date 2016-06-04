@@ -43,6 +43,12 @@ uv_ssl_t* uv_ssl_create(uv_loop_t* loop, SSL* ssl, int* err) {
     goto fail_bio;
   }
 
+  {
+    long mode;
+    mode = SSL_get_mode(res->ssl);
+    SSL_set_mode(res->ssl, mode | SSL_MODE_RELEASE_BUFFERS);
+  }
+
   SSL_set_bio(res->ssl, rbio, wbio);
   rbio = NULL;
   wbio = NULL;
