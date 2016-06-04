@@ -1,5 +1,6 @@
 #include "src/link_methods.h"
 #include "src/common.h"
+#include "src/errors.h"
 #include "src/private.h"
 #include "src/queue.h"
 
@@ -15,6 +16,7 @@ static int uv_ssl_link_shutdown(uv_link_t* link, uv_link_t* source,
                                 uv_link_shutdown_cb cb, void* arg);
 static void uv_ssl_link_close(uv_link_t* link, uv_link_t* source,
                               uv_link_close_cb cb);
+static const char* uv_ssl_link_strerror(uv_link_t* link, int err);
 static void uv_ssl_alloc_cb_override(uv_link_t* link,
                                      size_t suggested_size,
                                      uv_buf_t* buf);
@@ -31,6 +33,7 @@ uv_link_methods_t uv_ssl_methods = {
 
   .shutdown = uv_ssl_link_shutdown,
   .close = uv_ssl_link_close,
+  .strerror = uv_ssl_link_strerror,
 
   .alloc_cb_override = uv_ssl_alloc_cb_override,
   .read_cb_override = uv_ssl_read_cb_override
@@ -86,7 +89,7 @@ int uv_ssl_link_write(uv_link_t* link, uv_link_t* source, const uv_buf_t bufs[],
 
   /* No IPC writes on uv_ssl_t */
   if (send_handle != NULL)
-    return UV_EPROTO;
+    return UV_ENOSYS;
 
   ssl = (uv_ssl_t*) link;
 
@@ -123,6 +126,21 @@ void uv_ssl_link_close(uv_link_t* link, uv_link_t* source,
 }
 
 
+const char* uv_ssl_link_strerror(uv_link_t* link, int err) {
+  switch (err) {
+    case kUVSSLErrUnexpectedEOF:
+      return "uv_ssl_t: unexpected UV_EOF";
+    case kUVSSLErrCycleInput:
+      return "uv_ssl_t: SSL_read() error";
+    case kUVSSLErrSSLWrite:
+    case kUVSSLErrSSLSyncWrite:
+      return "uv_ssl_t: SSL_write() error";
+    default:
+      return NULL;
+  }
+}
+
+
 void uv_ssl_alloc_cb_override(uv_link_t* link,
                               size_t suggested_size,
                               uv_buf_t* buf) {
@@ -151,17 +169,17 @@ void uv_ssl_read_cb_override(uv_link_t* link,
   if (nread >= 0) {
     r = ringbuffer_write_append(&ssl->encrypted.input, nread);
     if (r != 0)
-      return uv_ssl_error(ssl, UV_ENOMEM, "ringbuffer_write_append()");
+      return uv_ssl_error(ssl, UV_ENOMEM);
   }
 
   /* Handle EOF */
   if (nread == UV_EOF)
-    return uv_ssl_error(ssl, UV_EPROTO, "unexpected UV_EOF");
+    return uv_ssl_error(ssl, kUVSSLErrUnexpectedEOF);
   else if (nread < 0)
-    return uv_ssl_error(ssl, nread, "unexpected error");
+    return uv_ssl_error(ssl, nread);
 
   r = uv_ssl_cycle(ssl);
 
   if (r != 0)
-    uv_ssl_error(ssl, r, NULL);
+    uv_ssl_error(ssl, r);
 }

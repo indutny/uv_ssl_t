@@ -18,10 +18,13 @@ static void error_client() {
 static void error_read_cb(uv_link_observer_t* observer,
                           ssize_t nread,
                           const uv_buf_t* buf) {
+  const char* msg;
   if (nread == 0)
     return;
 
-  CHECK_EQ(nread, UV_EPROTO, "observer_read_cb unexpectected error code");
+  msg = uv_link_strerror((uv_link_t*) &server.observer, nread);
+  CHECK_EQ(strcmp(msg, "uv_ssl_t: SSL_read() error"), 0,
+           "observer_read_cb unexpectected error code");
   read_cb_called++;
 
   CHECK_EQ(uv_link_read_stop((uv_link_t*) &server.observer), 0,

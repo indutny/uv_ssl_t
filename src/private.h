@@ -69,7 +69,7 @@ struct uv_ssl_write_cb_wrap_s {
 
 void uv_ssl_destroy(uv_ssl_t* s, uv_link_t* source, uv_link_close_cb cb);
 
-void uv_ssl_error(uv_ssl_t* ssl, int err, const char* desc);
+void uv_ssl_error(uv_ssl_t* ssl, int err);
 int uv_ssl_pop_error(uv_ssl_t* ssl);
 
 int uv_ssl_cycle(uv_ssl_t* ssl);

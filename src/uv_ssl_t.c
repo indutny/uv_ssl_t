@@ -3,6 +3,7 @@
 
 #include "src/common.h"
 #include "src/bio.h"
+#include "src/errors.h"
 #include "src/link_methods.h"
 
 static void uv_ssl_init_close_cb(uv_handle_t* handle);
@@ -206,8 +207,7 @@ int uv_ssl_cycle_input(uv_ssl_t* s) {
              err == SSL_ERROR_WANT_X509_LOOKUP) {
     err = 0;
   } else if (err != 0) {
-    /* TODO(indutny): meaningful errors */
-    err = UV_EPROTO;
+    err = kUVSSLErrCycleInput;
   }
 
   /* Stop state after handshake */
@@ -321,11 +321,11 @@ void uv_ssl_write_cb(uv_link_t* link, int status, void* arg) {
   write_size = (uintptr_t) arg;
 
   if (status != 0)
-    return uv_ssl_error(s, status, "uv_ssl_write_cb parent");
+    return uv_ssl_error(s, status);
 
   err = uv_ssl_cycle(s);
   if (err != 0)
-    return uv_ssl_error(s, err, "uv_ssl_write_cb");
+    return uv_ssl_error(s, err);
 
   s->pending_write -= (size_t) write_size;
 
@@ -430,7 +430,7 @@ int uv_ssl_write(uv_ssl_t* ssl, uv_link_t* source, const uv_buf_t bufs[],
       err == SSL_ERROR_WANT_X509_LOOKUP) {
     err = 0;
   } else if (err != 0) {
-    return UV_EPROTO;
+    return kUVSSLErrSSLWrite;
   }
 
   /* Only buffers before `i` were written, queue rest */
@@ -484,7 +484,7 @@ int uv_ssl_sync_write(uv_ssl_t* ssl, const uv_buf_t bufs[],
       err == SSL_ERROR_WANT_X509_LOOKUP) {
     err = 0;
   } else if (err != 0) {
-    return UV_EPROTO;
+    return kUVSSLErrSSLSyncWrite;
   }
 
   err = uv_ssl_cycle(ssl);
@@ -514,7 +514,7 @@ int uv_ssl_shutdown(uv_ssl_t* ssl, uv_link_t* source, uv_link_shutdown_cb cb,
 }
 
 
-void uv_ssl_error(uv_ssl_t* ssl, int err, const char* desc) {
+void uv_ssl_error(uv_ssl_t* ssl, int err) {
   uv_ssl_state_t state;
 
   state = ssl->state;
@@ -543,7 +543,6 @@ int uv_ssl_pop_error(uv_ssl_t* ssl) {
   if (ssl->state != kSSLStateError)
     return 0;
 
-  /* TODO(indutny): Meaningful error? */
   if (ssl->pending_err == 0)
     return UV_EPROTO;
 
