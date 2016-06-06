@@ -1,11 +1,7 @@
-language: c
+language: node_js
 sudo: false
-before_install:
-  - git clone --depth=1 https://chromium.googlesource.com/external/gyp.git tools/gyp
-  - git clone --depth=1 git://github.com/libuv/libuv.git test/deps/libuv
-  - git clone --depth=1 git://github.com/indutny/uv_link_t.git test/deps/uv_link_t
-  - git clone --depth=1 git://github.com/indutny/bud.git test/deps/bud
+node_js:
+  - "6.1"
 branches:
   only:
     - master
-script: make test

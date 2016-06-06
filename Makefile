@@ -1,21 +1,15 @@
 test:
-	./gyp_uv_ssl test -Duv_dir=`pwd`/test/deps/libuv \
-		-Duv_link_t_dir=`pwd`/test/deps/uv_link_t \
-		-Dopenssl_dir=`pwd`/test/deps/bud/deps/openssl/openssl
-	make -C out/ -j8
-	./out/Release/uv_ssl_t-test
-
-dist:
-	./gyp_uv_ssl -Duv_dir=`pwd`/test/deps/libuv \
-		-Duv_link_t_dir=`pwd`/test/deps/uv_link_t \
-		-Dopenssl_dir=`pwd`/test/deps/bud/deps/openssl/openssl
-	make -C out/ -j8
+	gypkg gen test/test.gyp
+	make -C test/out/ -j8
+	./test/out/Release/uv_ssl_t-test
 
 example:
-	./gyp_uv_ssl example -Duv_dir=`pwd`/test/deps/libuv \
-		-Duv_link_t_dir=`pwd`/test/deps/uv_link_t \
-		-Dopenssl_dir=`pwd`/test/deps/bud/deps/openssl/openssl
-	make -C out/ -j8
-	./out/Release/uv_ssl_t-example
+	gypkg gen example/example.gyp
+	make -C example/out/ -j8
+	./example/out/Release/uv_ssl_t-example
 
-.PHONY: dist test example
+dist:
+	gypkg gen uv_ssl_t.gyp
+	make -C out/ -j8
+
+.PHONY: test example dist

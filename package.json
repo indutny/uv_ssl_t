@@ -1,0 +1,14 @@
+{
+  "name": "uv_ssl_t",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "test": "make test"
+  },
+  "keywords": [],
+  "author": "Fedor Indutny <fedor@indutny.com>",
+  "license": "MIT",
+  "dependencies": {
+    "gypkg": "^1.0.1"
+  }
+}

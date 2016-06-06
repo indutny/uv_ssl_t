@@ -7,10 +7,16 @@
       "src"
     ],
 
+    "variables": {
+      "gypkg_deps": [
+        "git://github.com/libuv/libuv.git#v1.9.1:uv.gyp:libuv",
+        "git://github.com/indutny/uv_link_t:uv_link_t.gyp:uv_link_t",
+        "git://github.com/indutny/bud:deps/openssl/openssl.gyp:openssl",
+      ],
+    },
+
     "dependencies": [
-      "deps/libuv/uv.gyp:libuv",
-      "deps/uv_link_t/uv_link_t.gyp:uv_link_t",
-      "deps/bud/deps/openssl/openssl.gyp:openssl",
+      "<!@(gypkg deps <(gypkg_deps))",
       "../uv_ssl_t.gyp:uv_ssl_t",
     ],
 
