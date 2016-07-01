@@ -5,7 +5,6 @@ example: dist
 	./out/Release/uv_ssl_t-example
 
 dist:
-	gypkg gen uv_ssl_t.gyp
-	make -C out/ -j8
+	gypkg build uv_ssl_t.gyp
 
 .PHONY: test example dist
