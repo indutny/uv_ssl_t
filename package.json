@@ -1,6 +1,6 @@
 {
   "name": "uv_ssl_t",
-  "version": "1.0.2",
+  "version": "1.0.3",
   "private": true,
   "scripts": {
     "test": "make test"
