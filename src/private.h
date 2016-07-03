@@ -1,9 +1,11 @@
 #ifndef SRC_PRIVATE_H_
 #define SRC_PRIVATE_H_
 
-#include "openssl/ssl.h"
+/* NOTE: include `uv_link_t.h` first; it sets up proper includes on Windows */
 #include "ringbuffer.h"
 #include "uv_link_t.h"
+
+#include "openssl/ssl.h"
 
 #include "src/queue.h"
 

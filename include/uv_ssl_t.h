@@ -1,10 +1,11 @@
 #ifndef INCLUDE_UV_SSL_H_
 #define INCLUDE_UV_SSL_H_
 
-#include "openssl/ssl.h"
-
+/* NOTE: uv.h included first, because it sets up proper includes on Windows */
 #include "uv.h"
 #include "uv_link_t.h"
+
+#include "openssl/ssl.h"
 
 /* NOTE: can be cast to `uv_link_t` */
 typedef struct uv_ssl_s uv_ssl_t;
