@@ -3,6 +3,6 @@
 
 #include "src/common.h"
 
-uv_link_methods_t uv_ssl_methods;
+extern uv_link_methods_t uv_ssl_methods;
 
 #endif  /* SRC_LINK_METHODS_H_ */
