@@ -1,10 +1,10 @@
 #include <stdio.h>
 #include <string.h>
-#include <unistd.h>
 
 #include <openssl/ssl.h>
 #include <openssl/err.h>
 
+#include "test-common.h"
 #include "test-list.h"
 
 /* TODO(indutny): TAP */
