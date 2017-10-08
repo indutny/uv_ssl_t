@@ -5,8 +5,13 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <sys/socket.h>
-#include <unistd.h>
+#ifdef _WIN32
+# include <winsock2.h>
+# include <io.h>
+#else
+# include <sys/socket.h>
+# include <unistd.h>
+#endif /* _WIN32 */
 
 #include "openssl/bio.h"
 #include "openssl/err.h"
