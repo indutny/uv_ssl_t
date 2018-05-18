@@ -19,6 +19,12 @@ static int uv_ssl_queue_write_cb(uv_ssl_t* ssl, uv_link_t* source,
 static void uv_ssl_flush_write_cb(uv_idle_t* handle);
 static char* uv_ssl_get_write_data(uv_ssl_write_req_t* req);
 
+typedef struct write_req_s{
+  size_t write_size;
+  size_t bufs_count;
+  uv_buf_t *bufs;
+}write_req_t;
+
 uv_ssl_t* uv_ssl_create(uv_loop_t* loop, SSL* ssl, int* err) {
   uv_ssl_t* res;
   BIO* rbio;
@@ -294,13 +300,19 @@ restart:
   avail = ringbuffer_read_nextv(&s->encrypted.output, out, size, &count);
   if (avail == 0)
     return 0;
-
+  write_req_t *write_req = malloc(sizeof *write_req);
+  write_req->bufs = malloc(sizeof(uv_buf_t) * count);
+  write_req->bufs_count = count;
+  write_req->write_size = avail;
   for (i = 0; i < count; i++)
-    buf[i] = uv_buf_init(out[i], size[i]);
+  {
+    write_req->bufs[i] = uv_buf_init(malloc(size[i]), size[i]);
+    memcpy(write_req->bufs[i].base, out[i], size[i]);
+  }
 
   /* Write the reset asynchronously */
-  err = uv_link_propagate_write(s->parent, (uv_link_t*) s, buf, count, NULL,
-                                uv_ssl_write_cb, (void*) (uintptr_t) avail);
+  err = uv_link_propagate_write(s->parent, (uv_link_t*) s, write_req->bufs, count, NULL,
+                                uv_ssl_write_cb, write_req);
   if (err != 0)
     return err;
 
@@ -315,10 +327,20 @@ restart:
 void uv_ssl_write_cb(uv_link_t* link, int status, void* arg) {
   uv_ssl_t* s;
   int err;
-  uintptr_t write_size;
+  size_t write_size;
+  write_req_t *write_req;
+  unsigned int i;
 
   s = (uv_ssl_t*) link;
-  write_size = (uintptr_t) arg;
+  write_req = (write_req_t*) arg;
+  write_size = write_req->write_size;
+
+  for(i = 0; i < write_req->bufs_count; ++i)
+  {
+    free(write_req->bufs[i].base);
+  }
+  free(write_req->bufs);
+  free(write_req);
 
   if (status != 0)
     return uv_ssl_error(s, status);
@@ -327,7 +349,7 @@ void uv_ssl_write_cb(uv_link_t* link, int status, void* arg) {
   if (err != 0)
     return uv_ssl_error(s, err);
 
-  s->pending_write -= (size_t) write_size;
+  s->pending_write -= write_size;
 
   uv_ssl_flush_write_cb(&s->write_cb_idle);
 }
